@@ -1,0 +1,12 @@
+{
+  "description": "研学现场信息同步小程序壳",
+  "projectname": "yanxue-sync-miniprogram",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "postcss": true,
+    "minified": true
+  },
+  "compileType": "miniprogram",
+  "appid": "请替换为你的微信小程序 AppID"
+}

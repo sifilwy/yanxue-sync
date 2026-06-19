@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  yanxue-sync:
+    build: .
+    container_name: yanxue-sync
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+    volumes:
+      - ./data:/app/data

@@ -1,0 +1,4 @@
+你的域名 {
+  encode gzip
+  reverse_proxy yanxue-sync:4000
+}

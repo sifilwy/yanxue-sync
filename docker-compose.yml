@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  yanxue-sync:
+    build: .
+    container_name: yanxue-sync
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+    volumes:
+      - ./data:/app/data
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: yanxue-sync-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - yanxue-sync
+
+volumes:
+  caddy_data:
+  caddy_config:

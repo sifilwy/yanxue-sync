@@ -1,0 +1,10 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "研学现场填报",
+    "navigationBarBackgroundColor": "#1d6fd7",
+    "navigationBarTextStyle": "white"
+  }
+}

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+data/
+.env
+*.log
+yanxue-sync-deploy.tar.gz
+yanxue-sync-deploy.txt
