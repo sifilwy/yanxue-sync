@@ -6,11 +6,11 @@
 
 ## 当前线上地址
 
-- 手机填写端：http://139.59.237.249:4000/mobile
-- 后台汇总端：http://139.59.237.249:4000/admin
-- API 健康检查：http://139.59.237.249:4000/api/health
+- 手机填写端：https://yanxue-sync.top/mobile
+- 后台汇总端：https://yanxue-sync.top/admin
+- API 健康检查：https://yanxue-sync.top/api/health
 
-目前是 IP + HTTP 访问。后续如果要做正式微信小程序，需要绑定域名并配置 HTTPS。
+当前已经绑定域名并启用 HTTPS。旧的 IP 访问仍可用于排查问题。
 
 ## 当前功能
 
@@ -23,6 +23,7 @@
 - 分类统计：按分类查看数量。
 - 状态流转：未处理、处理中、已处理。
 - 导出 CSV：后台可导出记录。
+- 基础数据管理：后台可以管理团期、队伍、研学环节、问题分类、人员身份。
 
 ## 本地开发
 
@@ -82,13 +83,16 @@ git push
 - 代码目录：`/opt/yanxue-sync`
 - 数据目录：`/opt/yanxue-sync-data`
 - 容器名：`yanxue-sync`
+- HTTPS 容器名：`yanxue-sync-caddy`
 - 服务端口：`4000`
+- 域名：`yanxue-sync.top`
 
 服务器上可用这些命令查看状态：
 
 ```bash
 docker ps -a
 docker logs --tail=80 yanxue-sync
+docker logs --tail=80 yanxue-sync-caddy
 ```
 
 重新部署的大致流程：

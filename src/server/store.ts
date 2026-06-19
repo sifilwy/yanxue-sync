@@ -11,24 +11,28 @@ import type {
   Team
 } from "../shared/types";
 
+type RoleOption = BootstrapData["roles"][number];
+
 type DbShape = {
   sessions: CampSession[];
   teams: Team[];
   points: ItineraryPoint[];
+  categories: string[];
+  roles: RoleOption[];
   reports: Report[];
 };
 
 const dataDir = path.resolve(process.cwd(), "data");
 const dbPath = path.join(dataDir, "dev-db.json");
 
-const roles: BootstrapData["roles"] = [
+const defaultRoles: RoleOption[] = [
   { value: "coach", label: "教练" },
   { value: "teacher", label: "老师" },
   { value: "guide", label: "导游" },
   { value: "supervisor", label: "督导" }
 ];
 
-const categories = ["人员", "餐饮", "景点", "交通", "酒店", "家长反馈", "学生情况", "老师情况", "其他"];
+const defaultCategories = ["人员", "餐饮", "景点", "交通", "酒店", "家长反馈", "学生情况", "老师情况", "其他"];
 
 function seedDb(): DbShape {
   const sessionId = nanoid();
@@ -57,14 +61,28 @@ function seedDb(): DbShape {
       { id: nanoid(), sessionId, teamId: teamB, name: "景点", sortOrder: 2 },
       { id: nanoid(), sessionId, teamId: teamB, name: "午餐", sortOrder: 3 }
     ],
+    categories: defaultCategories,
+    roles: defaultRoles,
     reports: []
+  };
+}
+
+function normalizeDb(db: Partial<DbShape>): DbShape {
+  return {
+    sessions: db.sessions ?? [],
+    teams: db.teams ?? [],
+    points: db.points ?? [],
+    categories: db.categories?.length ? db.categories : defaultCategories,
+    roles: db.roles?.length ? db.roles : defaultRoles,
+    reports: db.reports ?? []
   };
 }
 
 async function readDb(): Promise<DbShape> {
   try {
     const raw = await readFile(dbPath, "utf8");
-    return JSON.parse(raw) as DbShape;
+    const db = normalizeDb(JSON.parse(raw) as Partial<DbShape>);
+    return db;
   } catch {
     const seeded = seedDb();
     await writeDb(seeded);
@@ -83,9 +101,74 @@ export async function getBootstrap(): Promise<BootstrapData> {
     sessions: db.sessions,
     teams: db.teams,
     points: db.points,
-    categories,
-    roles
+    categories: db.categories,
+    roles: db.roles
   };
+}
+
+export async function saveSession(input: Omit<CampSession, "id"> & { id?: string }) {
+  const db = await readDb();
+  const session: CampSession = { id: input.id || nanoid(), ...input };
+  const index = db.sessions.findIndex((item) => item.id === session.id);
+  if (index >= 0) db.sessions[index] = session;
+  else db.sessions.push(session);
+  await writeDb(db);
+  return session;
+}
+
+export async function deleteSession(id: string) {
+  const db = await readDb();
+  db.sessions = db.sessions.filter((item) => item.id !== id);
+  db.teams = db.teams.filter((item) => item.sessionId !== id);
+  db.points = db.points.filter((item) => item.sessionId !== id);
+  await writeDb(db);
+}
+
+export async function saveTeam(input: Omit<Team, "id"> & { id?: string }) {
+  const db = await readDb();
+  const team: Team = { id: input.id || nanoid(), ...input };
+  const index = db.teams.findIndex((item) => item.id === team.id);
+  if (index >= 0) db.teams[index] = team;
+  else db.teams.push(team);
+  await writeDb(db);
+  return team;
+}
+
+export async function deleteTeam(id: string) {
+  const db = await readDb();
+  db.teams = db.teams.filter((item) => item.id !== id);
+  db.points = db.points.filter((item) => item.teamId !== id);
+  await writeDb(db);
+}
+
+export async function savePoint(input: Omit<ItineraryPoint, "id"> & { id?: string }) {
+  const db = await readDb();
+  const point: ItineraryPoint = { id: input.id || nanoid(), ...input };
+  const index = db.points.findIndex((item) => item.id === point.id);
+  if (index >= 0) db.points[index] = point;
+  else db.points.push(point);
+  await writeDb(db);
+  return point;
+}
+
+export async function deletePoint(id: string) {
+  const db = await readDb();
+  db.points = db.points.filter((item) => item.id !== id);
+  await writeDb(db);
+}
+
+export async function saveCategories(categories: string[]) {
+  const db = await readDb();
+  db.categories = categories.map((item) => item.trim()).filter(Boolean);
+  await writeDb(db);
+  return db.categories;
+}
+
+export async function saveRoles(roles: RoleOption[]) {
+  const db = await readDb();
+  db.roles = roles;
+  await writeDb(db);
+  return db.roles;
 }
 
 export async function createReport(input: {
@@ -152,5 +235,5 @@ export async function getLookupMaps() {
 }
 
 export function roleLabel(role: Role) {
-  return roles.find((item) => item.value === role)?.label ?? role;
+  return defaultRoles.find((item) => item.value === role)?.label ?? role;
 }

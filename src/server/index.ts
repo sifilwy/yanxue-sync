@@ -5,10 +5,18 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import {
   createReport,
+  deletePoint,
+  deleteSession,
+  deleteTeam,
   getBootstrap,
   getLookupMaps,
   listReports,
   roleLabel,
+  saveCategories,
+  savePoint,
+  saveRoles,
+  saveSession,
+  saveTeam,
   updateReportStatus
 } from "./store";
 
@@ -37,12 +45,102 @@ const createReportSchema = z.object({
   imageUrls: z.array(z.string()).max(3).default([])
 });
 
+const sessionSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1),
+  city: z.string().default(""),
+  startsOn: z.string().default(""),
+  endsOn: z.string().default("")
+});
+
+const teamSchema = z.object({
+  id: z.string().optional(),
+  sessionId: z.string().min(1),
+  name: z.string().min(1)
+});
+
+const pointSchema = z.object({
+  id: z.string().optional(),
+  sessionId: z.string().min(1),
+  teamId: z.string().optional(),
+  name: z.string().min(1),
+  sortOrder: z.number().int().min(0).default(0)
+});
+
+const categoriesSchema = z.object({
+  categories: z.array(z.string().min(1)).min(1)
+});
+
+const rolesSchema = z.object({
+  roles: z.array(z.object({ value: roleSchema, label: z.string().min(1) })).length(4)
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, name: "yanxue-sync-api" });
 });
 
 app.get("/api/bootstrap", async (_req, res) => {
   res.json(await getBootstrap());
+});
+
+app.post("/api/config/sessions", async (req, res) => {
+  const parsed = sessionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "团期信息不完整", issues: parsed.error.issues });
+    return;
+  }
+  res.json(await saveSession(parsed.data));
+});
+
+app.delete("/api/config/sessions/:id", async (req, res) => {
+  await deleteSession(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post("/api/config/teams", async (req, res) => {
+  const parsed = teamSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "队伍信息不完整", issues: parsed.error.issues });
+    return;
+  }
+  res.json(await saveTeam(parsed.data));
+});
+
+app.delete("/api/config/teams/:id", async (req, res) => {
+  await deleteTeam(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post("/api/config/points", async (req, res) => {
+  const parsed = pointSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "环节信息不完整", issues: parsed.error.issues });
+    return;
+  }
+  res.json(await savePoint(parsed.data));
+});
+
+app.delete("/api/config/points/:id", async (req, res) => {
+  await deletePoint(req.params.id);
+  res.json({ ok: true });
+});
+
+app.put("/api/config/categories", async (req, res) => {
+  const parsed = categoriesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "分类信息不完整", issues: parsed.error.issues });
+    return;
+  }
+  res.json(await saveCategories(parsed.data.categories));
+});
+
+app.put("/api/config/roles", async (req, res) => {
+  const parsed = rolesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "身份信息不完整", issues: parsed.error.issues });
+    return;
+  }
+  res.json(await saveRoles(parsed.data.roles));
 });
 
 app.get("/api/reports", async (req, res) => {

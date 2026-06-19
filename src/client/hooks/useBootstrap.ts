@@ -6,9 +6,18 @@ export function useBootstrap() {
   const [data, setData] = useState<BootstrapData | null>(null);
   const [error, setError] = useState("");
 
+  async function reload() {
+    setError("");
+    try {
+      setData(await getBootstrap());
+    } catch {
+      setError("基础数据加载失败");
+    }
+  }
+
   useEffect(() => {
-    getBootstrap().then(setData).catch(() => setError("基础数据加载失败"));
+    reload();
   }, []);
 
-  return { data, error };
+  return { data, error, reload };
 }

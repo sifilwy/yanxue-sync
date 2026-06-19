@@ -54,3 +54,5 @@ export type BootstrapData = {
   categories: string[];
   roles: Array<{ value: Role; label: string }>;
 };
+
+export type EditableConfig = BootstrapData;
