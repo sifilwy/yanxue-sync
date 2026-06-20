@@ -48,6 +48,25 @@ export type Report = {
   updatedAt: string;
 };
 
+export type StaffMember = {
+  id: string;
+  name: string;
+  phone: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Participant = {
+  id: string;
+  name: string;
+  phone: string;
+  roomNumber: string;
+  parentName: string;
+  parentPhone: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type BootstrapData = {
   sessions: CampSession[];
   teams: Team[];

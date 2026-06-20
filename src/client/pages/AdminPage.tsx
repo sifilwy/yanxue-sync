@@ -1,16 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ClipboardList, Download, Plus, Save, Trash2 } from "lucide-react";
-import type { BootstrapData, CampSession, ItineraryPoint, Report, ReportStatus, Role, Team } from "../../shared/types";
+import { CheckCircle2, ClipboardList, Download, Plus, Save, Trash2, UsersRound } from "lucide-react";
+import type {
+  CampSession,
+  ItineraryPoint,
+  Participant,
+  Report,
+  ReportStatus,
+  Role,
+  StaffMember,
+  Team
+} from "../../shared/types";
 import {
   apiBase,
+  deleteParticipant,
   deletePoint,
   deleteSession,
+  deleteStaffMember,
   deleteTeam,
+  getParticipants,
   getReports,
+  getStaffMembers,
   saveCategories,
+  saveParticipant,
   savePoint,
   saveRoles,
   saveSession,
+  saveStaffMember,
   saveTeam,
   updateReportStatus
 } from "../api";
@@ -19,16 +34,52 @@ import { Loading, Shell } from "../components/Layout";
 import { statusLabels } from "../constants";
 import { useBootstrap } from "../hooks/useBootstrap";
 
+type AdminView = "reports" | "people";
+type PeopleView = "staff" | "participants";
 type SessionDraft = Omit<CampSession, "id"> & { id?: string };
 type TeamDraft = Omit<Team, "id"> & { id?: string };
 type PointDraft = Omit<ItineraryPoint, "id"> & { id?: string };
+type StaffDraft = Pick<StaffMember, "name" | "phone"> & { id?: string };
+type ParticipantDraft = Pick<Participant, "name" | "phone" | "roomNumber" | "parentName" | "parentPhone"> & { id?: string };
 
 const emptySession = (): SessionDraft => ({ name: "", city: "", startsOn: "", endsOn: "" });
 const emptyTeam = (sessionId = ""): TeamDraft => ({ sessionId, name: "" });
 const emptyPoint = (sessionId = "", teamId = ""): PointDraft => ({ sessionId, teamId, name: "", sortOrder: 0 });
+const emptyStaff = (): StaffDraft => ({ name: "", phone: "" });
+const emptyParticipant = (): ParticipantDraft => ({ name: "", phone: "", roomNumber: "", parentName: "", parentPhone: "" });
 
 export function AdminPage() {
   const { data, error, reload } = useBootstrap();
+  const [activeView, setActiveView] = useState<AdminView>("reports");
+
+  if (error) return <Shell><p>{error}</p></Shell>;
+  if (!data) return <Loading />;
+
+  return (
+    <Shell>
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">后台</p>
+          <h1>{activeView === "reports" ? "信息汇总" : "人员信息"}</h1>
+        </div>
+        {activeView === "reports" ? <ClipboardList size={28} /> : <UsersRound size={28} />}
+      </header>
+
+      <nav className="admin-tabs" aria-label="后台模块">
+        <button className={activeView === "reports" ? "active" : ""} onClick={() => setActiveView("reports")}>
+          信息汇总
+        </button>
+        <button className={activeView === "people" ? "active" : ""} onClick={() => setActiveView("people")}>
+          人员信息
+        </button>
+      </nav>
+
+      {activeView === "reports" ? <ReportsView data={data} reloadBootstrap={reload} /> : <PeopleViewPanel />}
+    </Shell>
+  );
+}
+
+function ReportsView({ data, reloadBootstrap }: { data: NonNullable<ReturnType<typeof useBootstrap>["data"]>; reloadBootstrap: () => Promise<void> }) {
   const [reports, setReports] = useState<Report[]>([]);
   const [allReports, setAllReports] = useState<Report[]>([]);
   const [sessionId, setSessionId] = useState("");
@@ -36,17 +87,13 @@ export function AdminPage() {
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(true);
-
   const [sessionDraft, setSessionDraft] = useState<SessionDraft>(emptySession());
-  const [teamDraft, setTeamDraft] = useState<TeamDraft>(emptyTeam());
-  const [pointDraft, setPointDraft] = useState<PointDraft>(emptyPoint());
-  const [categoriesText, setCategoriesText] = useState("");
-  const [roleLabels, setRoleLabels] = useState<Record<Role, string>>({
-    coach: "教练",
-    teacher: "老师",
-    guide: "导游",
-    supervisor: "督导"
-  });
+  const [teamDraft, setTeamDraft] = useState<TeamDraft>(emptyTeam(data.sessions[0]?.id ?? ""));
+  const [pointDraft, setPointDraft] = useState<PointDraft>(emptyPoint(data.sessions[0]?.id ?? "", data.teams[0]?.id ?? ""));
+  const [categoriesText, setCategoriesText] = useState(data.categories.join("\n"));
+  const [roleLabels, setRoleLabels] = useState<Record<Role, string>>(
+    Object.fromEntries(data.roles.map((item) => [item.value, item.label])) as Record<Role, string>
+  );
   const [configMessage, setConfigMessage] = useState("");
 
   async function loadReports() {
@@ -65,7 +112,6 @@ export function AdminPage() {
   }, [sessionId, role, status, category]);
 
   useEffect(() => {
-    if (!data) return;
     setCategoriesText(data.categories.join("\n"));
     setRoleLabels(Object.fromEntries(data.roles.map((item) => [item.value, item.label])) as Record<Role, string>);
     setTeamDraft(emptyTeam(data.sessions[0]?.id ?? ""));
@@ -73,13 +119,13 @@ export function AdminPage() {
   }, [data]);
 
   const teamsForConfig = useMemo(
-    () => data?.teams.filter((item) => item.sessionId === pointDraft.sessionId) ?? [],
-    [data, pointDraft.sessionId]
+    () => data.teams.filter((item) => item.sessionId === pointDraft.sessionId),
+    [data.teams, pointDraft.sessionId]
   );
 
   async function refreshAfterConfig(message: string) {
     setConfigMessage(message);
-    await reload();
+    await reloadBootstrap();
     await loadReports();
   }
 
@@ -88,60 +134,16 @@ export function AdminPage() {
     await loadReports();
   }
 
-  async function submitSession(event: React.FormEvent) {
-    event.preventDefault();
-    await saveSession(sessionDraft);
-    setSessionDraft(emptySession());
-    await refreshAfterConfig("团期已保存");
-  }
-
-  async function submitTeam(event: React.FormEvent) {
-    event.preventDefault();
-    await saveTeam(teamDraft);
-    setTeamDraft(emptyTeam(teamDraft.sessionId));
-    await refreshAfterConfig("队伍已保存");
-  }
-
-  async function submitPoint(event: React.FormEvent) {
-    event.preventDefault();
-    await savePoint(pointDraft);
-    setPointDraft(emptyPoint(pointDraft.sessionId, pointDraft.teamId));
-    await refreshAfterConfig("环节已保存");
-  }
-
-  async function submitCategories() {
-    const categories = categoriesText.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
-    await saveCategories(categories);
-    await refreshAfterConfig("问题分类已保存");
-  }
-
-  async function submitRoles() {
-    const roles = data!.roles.map((item) => ({ value: item.value, label: roleLabels[item.value] || item.label }));
-    await saveRoles(roles);
-    await refreshAfterConfig("人员身份已保存");
-  }
-
-  const sessionName = (id: string) => data?.sessions.find((item) => item.id === id)?.name ?? "";
-  const teamName = (id?: string) => data?.teams.find((item) => item.id === id)?.name ?? "";
-  const pointName = (id?: string) => data?.points.find((item) => item.id === id)?.name ?? "";
-  const roleName = (value: Role) => data?.roles.find((item) => item.value === value)?.label ?? value;
+  const sessionName = (id: string) => data.sessions.find((item) => item.id === id)?.name ?? "";
+  const teamName = (id?: string) => data.teams.find((item) => item.id === id)?.name ?? "";
+  const pointName = (id?: string) => data.points.find((item) => item.id === id)?.name ?? "";
+  const roleName = (value: Role) => data.roles.find((item) => item.value === value)?.label ?? value;
   const statusCount = (value: ReportStatus) => allReports.filter((report) => report.status === value).length;
   const urgentCount = allReports.filter((report) => report.isUrgent).length;
   const settlementCount = allReports.filter((report) => report.affectsSettlement).length;
 
-  if (error) return <Shell><p>{error}</p></Shell>;
-  if (!data) return <Loading />;
-
   return (
-    <Shell>
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">后台</p>
-          <h1>信息汇总</h1>
-        </div>
-        <ClipboardList size={28} />
-      </header>
-
+    <>
       <section className="toolbar">
         <select value={sessionId} onChange={(event) => setSessionId(event.target.value)}>
           <option value="">全部团期</option>
@@ -196,15 +198,12 @@ export function AdminPage() {
 
       <section className="category-tabs">
         <button className={category === "" ? "active" : ""} onClick={() => setCategory("")}>全部</button>
-        {data.categories.map((item) => {
-          const count = allReports.filter((report) => report.category === item).length;
-          return (
-            <button className={category === item ? "active" : ""} key={item} onClick={() => setCategory(item)}>
-              {item}
-              <span>{count}</span>
-            </button>
-          );
-        })}
+        {data.categories.map((item) => (
+          <button className={category === item ? "active" : ""} key={item} onClick={() => setCategory(item)}>
+            {item}
+            <span>{allReports.filter((report) => report.category === item).length}</span>
+          </button>
+        ))}
       </section>
 
       <section className="panel">
@@ -254,7 +253,12 @@ export function AdminPage() {
         </div>
 
         <div className="config-grid">
-          <form className="config-card" onSubmit={submitSession}>
+          <form className="config-card" onSubmit={async (event) => {
+            event.preventDefault();
+            await saveSession(sessionDraft);
+            setSessionDraft(emptySession());
+            await refreshAfterConfig("团期已保存");
+          }}>
             <h3>团期</h3>
             <input placeholder="团期名称" value={sessionDraft.name} onChange={(event) => setSessionDraft({ ...sessionDraft, name: event.target.value })} required />
             <input placeholder="城市" value={sessionDraft.city} onChange={(event) => setSessionDraft({ ...sessionDraft, city: event.target.value })} />
@@ -273,7 +277,12 @@ export function AdminPage() {
             </div>
           </form>
 
-          <form className="config-card" onSubmit={submitTeam}>
+          <form className="config-card" onSubmit={async (event) => {
+            event.preventDefault();
+            await saveTeam(teamDraft);
+            setTeamDraft(emptyTeam(teamDraft.sessionId));
+            await refreshAfterConfig("队伍已保存");
+          }}>
             <h3>队伍</h3>
             <select value={teamDraft.sessionId} onChange={(event) => setTeamDraft({ ...teamDraft, sessionId: event.target.value })} required>
               {data.sessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -290,7 +299,12 @@ export function AdminPage() {
             </div>
           </form>
 
-          <form className="config-card" onSubmit={submitPoint}>
+          <form className="config-card" onSubmit={async (event) => {
+            event.preventDefault();
+            await savePoint(pointDraft);
+            setPointDraft(emptyPoint(pointDraft.sessionId, pointDraft.teamId));
+            await refreshAfterConfig("环节已保存");
+          }}>
             <h3>研学环节</h3>
             <select value={pointDraft.sessionId} onChange={(event) => setPointDraft({ ...pointDraft, sessionId: event.target.value, teamId: "" })} required>
               {data.sessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -317,7 +331,11 @@ export function AdminPage() {
           <div className="config-card">
             <h3>问题分类</h3>
             <textarea value={categoriesText} onChange={(event) => setCategoriesText(event.target.value)} />
-            <button className="primary compact" type="button" onClick={submitCategories}><Save size={16} />保存分类</button>
+            <button className="primary compact" type="button" onClick={async () => {
+              const categories = categoriesText.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+              await saveCategories(categories);
+              await refreshAfterConfig("问题分类已保存");
+            }}><Save size={16} />保存分类</button>
           </div>
 
           <div className="config-card">
@@ -328,10 +346,155 @@ export function AdminPage() {
                 <input value={roleLabels[item.value] ?? item.label} onChange={(event) => setRoleLabels({ ...roleLabels, [item.value]: event.target.value })} />
               </label>
             ))}
-            <button className="primary compact" type="button" onClick={submitRoles}><Save size={16} />保存身份</button>
+            <button className="primary compact" type="button" onClick={async () => {
+              await saveRoles(data.roles.map((item) => ({ value: item.value, label: roleLabels[item.value] || item.label })));
+              await refreshAfterConfig("人员身份已保存");
+            }}><Save size={16} />保存身份</button>
           </div>
         </div>
       </section>
-    </Shell>
+    </>
   );
+}
+
+function PeopleViewPanel() {
+  const [activePeopleView, setActivePeopleView] = useState<PeopleView>("staff");
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [staffDraft, setStaffDraft] = useState<StaffDraft>(emptyStaff());
+  const [participantDraft, setParticipantDraft] = useState<ParticipantDraft>(emptyParticipant());
+  const [keyword, setKeyword] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function loadPeople() {
+    const [staff, studentList] = await Promise.all([getStaffMembers(), getParticipants()]);
+    setStaffMembers(staff);
+    setParticipants(studentList);
+  }
+
+  useEffect(() => {
+    loadPeople();
+  }, []);
+
+  const filteredStaff = staffMembers.filter((item) => includesKeyword([item.name, item.phone], keyword));
+  const filteredParticipants = participants.filter((item) => includesKeyword([
+    item.name,
+    item.phone,
+    item.roomNumber,
+    item.parentName,
+    item.parentPhone
+  ], keyword));
+
+  return (
+    <>
+      <nav className="sub-tabs" aria-label="人员类型">
+        <button className={activePeopleView === "staff" ? "active" : ""} onClick={() => setActivePeopleView("staff")}>
+          工作人员
+        </button>
+        <button className={activePeopleView === "participants" ? "active" : ""} onClick={() => setActivePeopleView("participants")}>
+          参加团员
+        </button>
+      </nav>
+
+      <section className="people-layout">
+        <form className="panel people-form" onSubmit={async (event) => {
+          event.preventDefault();
+          if (activePeopleView === "staff") {
+            await saveStaffMember(staffDraft);
+            setStaffDraft(emptyStaff());
+            setMessage("工作人员已保存");
+          } else {
+            await saveParticipant(participantDraft);
+            setParticipantDraft(emptyParticipant());
+            setMessage("团员信息已保存");
+          }
+          await loadPeople();
+        }}>
+          <div className="section-head">
+            <h2>{activePeopleView === "staff" ? "新增工作人员" : "新增参加团员"}</h2>
+            <span>{message}</span>
+          </div>
+
+          {activePeopleView === "staff" ? (
+            <>
+              <label>
+                姓名
+                <input value={staffDraft.name} onChange={(event) => setStaffDraft({ ...staffDraft, name: event.target.value })} required />
+              </label>
+              <label>
+                电话
+                <input value={staffDraft.phone} onChange={(event) => setStaffDraft({ ...staffDraft, phone: event.target.value })} />
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                姓名
+                <input value={participantDraft.name} onChange={(event) => setParticipantDraft({ ...participantDraft, name: event.target.value })} required />
+              </label>
+              <label>
+                电话
+                <input value={participantDraft.phone} onChange={(event) => setParticipantDraft({ ...participantDraft, phone: event.target.value })} />
+              </label>
+              <label>
+                房号
+                <input value={participantDraft.roomNumber} onChange={(event) => setParticipantDraft({ ...participantDraft, roomNumber: event.target.value })} />
+              </label>
+              <label>
+                家长姓名
+                <input value={participantDraft.parentName} onChange={(event) => setParticipantDraft({ ...participantDraft, parentName: event.target.value })} />
+              </label>
+              <label>
+                家长电话
+                <input value={participantDraft.parentPhone} onChange={(event) => setParticipantDraft({ ...participantDraft, parentPhone: event.target.value })} />
+              </label>
+            </>
+          )}
+
+          <button className="primary"><Plus size={17} />保存</button>
+        </form>
+
+        <section className="panel people-list-panel">
+          <div className="section-head">
+            <h2>{activePeopleView === "staff" ? "工作人员列表" : "参加团员列表"}</h2>
+            <span>{activePeopleView === "staff" ? filteredStaff.length : filteredParticipants.length} 人</span>
+          </div>
+          <input className="people-search" placeholder="搜索姓名、电话、房号或家长信息" value={keyword} onChange={(event) => setKeyword(event.target.value)} />
+
+          {activePeopleView === "staff" ? (
+            <div className="people-table">
+              <div className="people-row head"><span>姓名</span><span>电话</span><span>操作</span></div>
+              {filteredStaff.map((item) => (
+                <div className="people-row" key={item.id}>
+                  <span>{item.name}</span>
+                  <span>{item.phone || "-"}</span>
+                  <button type="button" onClick={async () => { await deleteStaffMember(item.id); await loadPeople(); }}>删除</button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="people-table participant-table">
+              <div className="people-row head"><span>姓名</span><span>电话</span><span>房号</span><span>家长</span><span>家长电话</span><span>操作</span></div>
+              {filteredParticipants.map((item) => (
+                <div className="people-row" key={item.id}>
+                  <span>{item.name}</span>
+                  <span>{item.phone || "-"}</span>
+                  <span>{item.roomNumber || "-"}</span>
+                  <span>{item.parentName || "-"}</span>
+                  <span>{item.parentPhone || "-"}</span>
+                  <button type="button" onClick={async () => { await deleteParticipant(item.id); await loadPeople(); }}>删除</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </section>
+    </>
+  );
+}
+
+function includesKeyword(values: string[], keyword: string) {
+  const text = keyword.trim().toLowerCase();
+  if (!text) return true;
+  return values.some((value) => value.toLowerCase().includes(text));
 }

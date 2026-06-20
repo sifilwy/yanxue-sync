@@ -1,4 +1,14 @@
-import type { BootstrapData, CampSession, ItineraryPoint, Report, ReportStatus, Role, Team } from "../shared/types";
+import type {
+  BootstrapData,
+  CampSession,
+  ItineraryPoint,
+  Participant,
+  Report,
+  ReportStatus,
+  Role,
+  StaffMember,
+  Team
+} from "../shared/types";
 import type { PreparedImage } from "./utils/images";
 
 function getApiBase() {
@@ -127,4 +137,34 @@ export function saveRoles(roles: BootstrapData["roles"]) {
     method: "PUT",
     body: JSON.stringify({ roles })
   });
+}
+
+export function getStaffMembers() {
+  return request<StaffMember[]>("/api/people/staff");
+}
+
+export function saveStaffMember(input: Pick<StaffMember, "name" | "phone"> & { id?: string }) {
+  return request<StaffMember>("/api/people/staff", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function deleteStaffMember(id: string) {
+  return request<{ ok: true }>(`/api/people/staff/${id}`, { method: "DELETE" });
+}
+
+export function getParticipants() {
+  return request<Participant[]>("/api/people/participants");
+}
+
+export function saveParticipant(input: Pick<Participant, "name" | "phone" | "roomNumber" | "parentName" | "parentPhone"> & { id?: string }) {
+  return request<Participant>("/api/people/participants", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function deleteParticipant(id: string) {
+  return request<{ ok: true }>(`/api/people/participants/${id}`, { method: "DELETE" });
 }

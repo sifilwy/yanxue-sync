@@ -12,13 +12,19 @@ import {
   deleteTeam,
   getBootstrap,
   getLookupMaps,
+  listParticipants,
   listReports,
+  listStaffMembers,
   roleLabel,
   saveCategories,
+  saveParticipant,
   savePoint,
   saveRoles,
   saveSession,
+  saveStaffMember,
   saveTeam,
+  deleteParticipant,
+  deleteStaffMember,
   updateReportStatus
 } from "./store";
 
@@ -88,6 +94,21 @@ const uploadSchema = z.object({
   thumbs: z.array(z.string().startsWith("data:image/")).max(3)
 });
 
+const staffSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1),
+  phone: z.string().default("")
+});
+
+const participantSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1),
+  phone: z.string().default(""),
+  roomNumber: z.string().default(""),
+  parentName: z.string().default(""),
+  parentPhone: z.string().default("")
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, name: "yanxue-sync-api" });
 });
@@ -125,6 +146,42 @@ app.post("/api/uploads", async (req, res) => {
   }));
 
   res.status(201).json({ urls });
+});
+
+app.get("/api/people/staff", async (_req, res) => {
+  res.json(await listStaffMembers());
+});
+
+app.post("/api/people/staff", async (req, res) => {
+  const parsed = staffSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "工作人员信息不完整", issues: parsed.error.issues });
+    return;
+  }
+  res.json(await saveStaffMember(parsed.data));
+});
+
+app.delete("/api/people/staff/:id", async (req, res) => {
+  await deleteStaffMember(req.params.id);
+  res.json({ ok: true });
+});
+
+app.get("/api/people/participants", async (_req, res) => {
+  res.json(await listParticipants());
+});
+
+app.post("/api/people/participants", async (req, res) => {
+  const parsed = participantSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "参加团员信息不完整", issues: parsed.error.issues });
+    return;
+  }
+  res.json(await saveParticipant(parsed.data));
+});
+
+app.delete("/api/people/participants/:id", async (req, res) => {
+  await deleteParticipant(req.params.id);
+  res.json({ ok: true });
 });
 
 app.post("/api/config/sessions", async (req, res) => {

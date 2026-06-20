@@ -5,9 +5,11 @@ import type {
   BootstrapData,
   CampSession,
   ItineraryPoint,
+  Participant,
   Report,
   ReportStatus,
   Role,
+  StaffMember,
   Team
 } from "../shared/types";
 
@@ -20,6 +22,8 @@ type DbShape = {
   categories: string[];
   roles: RoleOption[];
   reports: Report[];
+  staffMembers: StaffMember[];
+  participants: Participant[];
 };
 
 const dataDir = path.resolve(process.cwd(), "data");
@@ -65,7 +69,9 @@ function seedDb(): DbShape {
     ],
     categories: defaultCategories,
     roles: defaultRoles,
-    reports: []
+    reports: [],
+    staffMembers: [],
+    participants: []
   };
 }
 
@@ -76,7 +82,9 @@ function normalizeDb(db: Partial<DbShape>): DbShape {
     points: db.points ?? [],
     categories: db.categories?.length ? db.categories : defaultCategories,
     roles: db.roles?.length ? db.roles : defaultRoles,
-    reports: db.reports ?? []
+    reports: db.reports ?? [],
+    staffMembers: db.staffMembers ?? [],
+    participants: db.participants ?? []
   };
 }
 
@@ -240,6 +248,74 @@ export async function createReport(input: {
   db.reports.unshift(report);
   await writeDb(db);
   return report;
+}
+
+export async function listStaffMembers() {
+  const db = await readDb();
+  return db.staffMembers;
+}
+
+export async function saveStaffMember(input: { id?: string; name: string; phone: string }) {
+  const db = await readDb();
+  const now = new Date().toISOString();
+  const existing = input.id ? db.staffMembers.find((item) => item.id === input.id) : null;
+  const staff: StaffMember = {
+    id: input.id || nanoid(),
+    name: input.name,
+    phone: input.phone,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now
+  };
+  const index = db.staffMembers.findIndex((item) => item.id === staff.id);
+  if (index >= 0) db.staffMembers[index] = staff;
+  else db.staffMembers.unshift(staff);
+  await writeDb(db);
+  return staff;
+}
+
+export async function deleteStaffMember(id: string) {
+  const db = await readDb();
+  db.staffMembers = db.staffMembers.filter((item) => item.id !== id);
+  await writeDb(db);
+}
+
+export async function listParticipants() {
+  const db = await readDb();
+  return db.participants;
+}
+
+export async function saveParticipant(input: {
+  id?: string;
+  name: string;
+  phone: string;
+  roomNumber: string;
+  parentName: string;
+  parentPhone: string;
+}) {
+  const db = await readDb();
+  const now = new Date().toISOString();
+  const existing = input.id ? db.participants.find((item) => item.id === input.id) : null;
+  const participant: Participant = {
+    id: input.id || nanoid(),
+    name: input.name,
+    phone: input.phone,
+    roomNumber: input.roomNumber,
+    parentName: input.parentName,
+    parentPhone: input.parentPhone,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now
+  };
+  const index = db.participants.findIndex((item) => item.id === participant.id);
+  if (index >= 0) db.participants[index] = participant;
+  else db.participants.unshift(participant);
+  await writeDb(db);
+  return participant;
+}
+
+export async function deleteParticipant(id: string) {
+  const db = await readDb();
+  db.participants = db.participants.filter((item) => item.id !== id);
+  await writeDb(db);
 }
 
 export async function listReports(filters: {
