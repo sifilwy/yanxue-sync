@@ -101,19 +101,23 @@ async function migrateEmbeddedImages(db: DbShape) {
 
   for (const report of db.reports) {
     const nextUrls: string[] = [];
+    const nextThumbUrls: string[] = [];
     for (const url of report.imageUrls ?? []) {
       if (!url.startsWith("data:image/")) {
         nextUrls.push(url);
+        nextThumbUrls.push(report.imageThumbUrls?.[nextUrls.length - 1] ?? url);
         continue;
       }
 
       const savedUrl = await saveDataImage(url);
       if (savedUrl) {
         nextUrls.push(savedUrl);
+        nextThumbUrls.push(savedUrl);
         changed = true;
       }
     }
     report.imageUrls = nextUrls;
+    report.imageThumbUrls = nextThumbUrls;
   }
 
   return changed;
@@ -221,6 +225,7 @@ export async function createReport(input: {
   isUrgent: boolean;
   affectsSettlement: boolean;
   imageUrls: string[];
+  imageThumbUrls?: string[];
 }) {
   const db = await readDb();
   const now = new Date().toISOString();
@@ -258,7 +263,8 @@ export async function listReports(filters: {
 function compactReportForList(report: Report): Report {
   return {
     ...report,
-    imageUrls: report.imageUrls.filter((url) => url.length <= maxInlineImageLength)
+    imageUrls: report.imageUrls.filter((url) => url.length <= maxInlineImageLength),
+    imageThumbUrls: report.imageThumbUrls?.filter((url) => url.length <= maxInlineImageLength)
   };
 }
 

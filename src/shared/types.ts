@@ -43,6 +43,7 @@ export type Report = {
   isUrgent: boolean;
   affectsSettlement: boolean;
   imageUrls: string[];
+  imageThumbUrls?: string[];
   createdAt: string;
   updatedAt: string;
 };

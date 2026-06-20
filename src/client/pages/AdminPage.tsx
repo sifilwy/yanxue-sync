@@ -224,7 +224,7 @@ export function AdminPage() {
                     <span>{pointName(report.pointId) || "未选环节"}</span>
                   </div>
                   <p>{report.content}</p>
-                  <RecordImages imageUrls={report.imageUrls} />
+                  <RecordImages imageUrls={report.imageUrls} thumbUrls={report.imageThumbUrls} />
                   <div className="report-foot">
                     <span>{roleName(report.reporterRole)} · {report.reporterName}</span>
                     <span>{new Date(report.createdAt).toLocaleString()}</span>

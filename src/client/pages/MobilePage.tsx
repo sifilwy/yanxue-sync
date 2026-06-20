@@ -6,7 +6,7 @@ import { RecordImages } from "../components/RecordImages";
 import { Loading, Shell } from "../components/Layout";
 import { profileStorageKey } from "../constants";
 import { useBootstrap } from "../hooks/useBootstrap";
-import { filesToDataUrls } from "../utils/images";
+import { filesToDataUrls, type PreparedImage } from "../utils/images";
 
 type SavedProfile = {
   name?: string;
@@ -26,7 +26,7 @@ export function MobilePage() {
   const [pointId, setPointId] = useState("");
   const [category, setCategory] = useState("");
   const [content, setContent] = useState("");
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imageUrls, setImageUrls] = useState<PreparedImage[]>([]);
   const [isUrgent, setIsUrgent] = useState(false);
   const [affectsSettlement, setAffectsSettlement] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -109,7 +109,8 @@ export function MobilePage() {
         pointId,
         category,
         content,
-        imageUrls: uploaded.urls,
+        imageUrls: uploaded.urls.map((image) => image.url),
+        imageThumbUrls: uploaded.urls.map((image) => image.thumbUrl),
         isUrgent,
         affectsSettlement
       });
@@ -237,8 +238,8 @@ export function MobilePage() {
         {imageUrls.length > 0 && (
           <div className="image-grid">
             {imageUrls.map((url, index) => (
-              <div className="image-preview" key={url}>
-                <img src={url} alt={`上传图片 ${index + 1}`} />
+              <div className="image-preview" key={`${url.thumbUrl}-${index}`}>
+                <img src={url.thumbUrl} alt={`上传图片 ${index + 1}`} />
                 <button type="button" onClick={() => setImageUrls((items) => items.filter((_, itemIndex) => itemIndex !== index))}>
                   移除
                 </button>
@@ -265,7 +266,7 @@ export function MobilePage() {
             <strong>{item.category}</strong>
             <span>{new Date(item.createdAt).toLocaleString()}</span>
             <p>{item.content}</p>
-            <RecordImages imageUrls={item.imageUrls} />
+            <RecordImages imageUrls={item.imageUrls} thumbUrls={item.imageThumbUrls} />
           </article>
         ))}
       </section>}

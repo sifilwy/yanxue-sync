@@ -1,4 +1,5 @@
 import type { BootstrapData, CampSession, ItineraryPoint, Report, ReportStatus, Role, Team } from "../shared/types";
+import type { PreparedImage } from "./utils/images";
 
 function getApiBase() {
   if (import.meta.env.VITE_API_BASE) return import.meta.env.VITE_API_BASE;
@@ -39,6 +40,7 @@ export function createReport(input: {
   category: string;
   content: string;
   imageUrls: string[];
+  imageThumbUrls?: string[];
   isUrgent: boolean;
   affectsSettlement: boolean;
 }) {
@@ -48,10 +50,13 @@ export function createReport(input: {
   });
 }
 
-export function uploadImages(images: string[]) {
-  return request<{ urls: string[] }>("/api/uploads", {
+export function uploadImages(images: PreparedImage[]) {
+  return request<{ urls: Array<{ url: string; thumbUrl: string }> }>("/api/uploads", {
     method: "POST",
-    body: JSON.stringify({ images })
+    body: JSON.stringify({
+      images: images.map((image) => image.url),
+      thumbs: images.map((image) => image.thumbUrl)
+    })
   });
 }
 

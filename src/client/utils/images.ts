@@ -1,8 +1,13 @@
+export type PreparedImage = {
+  url: string;
+  thumbUrl: string;
+};
+
 export async function filesToDataUrls(files: FileList | null, limit: number) {
   if (!files || limit <= 0) return [];
   const selected = Array.from(files).slice(0, limit);
 
-  return Promise.all(selected.map((file) => compressImage(file)));
+  return Promise.all(selected.map((file) => prepareImage(file)));
 }
 
 function readFileAsDataUrl(file: File) {
@@ -14,12 +19,18 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
-async function compressImage(file: File) {
+async function prepareImage(file: File): Promise<PreparedImage> {
   const source = await readFileAsDataUrl(file);
-  if (!file.type.startsWith("image/")) return source;
+  if (!file.type.startsWith("image/")) return { url: source, thumbUrl: source };
 
   const image = await loadImage(source);
-  const maxSide = 1280;
+  return {
+    url: drawImageToDataUrl(image, 1600, 0.82),
+    thumbUrl: drawImageToDataUrl(image, 280, 0.72)
+  };
+}
+
+function drawImageToDataUrl(image: HTMLImageElement, maxSide: number, quality: number) {
   const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
   const width = Math.max(1, Math.round(image.width * ratio));
   const height = Math.max(1, Math.round(image.height * ratio));
@@ -28,10 +39,10 @@ async function compressImage(file: File) {
   canvas.height = height;
 
   const context = canvas.getContext("2d");
-  if (!context) return source;
+  if (!context) return image.src;
 
   context.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL("image/jpeg", 0.72);
+  return canvas.toDataURL("image/jpeg", quality);
 }
 
 function loadImage(src: string) {

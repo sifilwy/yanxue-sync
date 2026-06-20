@@ -29,10 +29,12 @@ const __dirname = path.dirname(__filename);
 const distPath = path.resolve(__dirname, "../../dist");
 const dataPath = path.resolve(process.cwd(), "data");
 const uploadPath = path.join(dataPath, "uploads");
+const thumbPath = path.join(dataPath, "thumbs");
 
 app.use(cors());
 app.use(express.json({ limit: "8mb" }));
 app.use("/uploads", express.static(uploadPath));
+app.use("/thumbs", express.static(thumbPath));
 
 const roleSchema = z.enum(["coach", "teacher", "guide", "supervisor"]);
 const statusSchema = z.enum(["open", "processing", "done"]);
@@ -47,7 +49,8 @@ const createReportSchema = z.object({
   content: z.string().min(1),
   isUrgent: z.boolean().default(false),
   affectsSettlement: z.boolean().default(false),
-  imageUrls: z.array(z.string()).max(3).default([])
+  imageUrls: z.array(z.string()).max(3).default([]),
+  imageThumbUrls: z.array(z.string()).max(3).default([])
 });
 
 const sessionSchema = z.object({
@@ -81,7 +84,8 @@ const rolesSchema = z.object({
 });
 
 const uploadSchema = z.object({
-  images: z.array(z.string().startsWith("data:image/")).max(3)
+  images: z.array(z.string().startsWith("data:image/")).max(3),
+  thumbs: z.array(z.string().startsWith("data:image/")).max(3)
 });
 
 app.get("/api/health", (_req, res) => {
@@ -100,14 +104,24 @@ app.post("/api/uploads", async (req, res) => {
   }
 
   await mkdir(uploadPath, { recursive: true });
-  const urls = await Promise.all(parsed.data.images.map(async (image) => {
+  await mkdir(thumbPath, { recursive: true });
+  const urls = await Promise.all(parsed.data.images.map(async (image, index) => {
     const match = image.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,(.+)$/);
     if (!match) throw new Error("Unsupported image format");
+    const thumb = parsed.data.thumbs[index] ?? image;
+    const thumbMatch = thumb.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,(.+)$/);
+    if (!thumbMatch) throw new Error("Unsupported thumbnail format");
 
     const ext = match[1].includes("png") ? "png" : match[1].includes("webp") ? "webp" : "jpg";
-    const filename = `${Date.now()}-${nanoid()}.${ext}`;
-    await writeFile(path.join(uploadPath, filename), Buffer.from(match[2], "base64"));
-    return `/uploads/${filename}`;
+    const thumbExt = thumbMatch[1].includes("png") ? "png" : thumbMatch[1].includes("webp") ? "webp" : "jpg";
+    const id = `${Date.now()}-${nanoid()}`;
+    const filename = `${id}.${ext}`;
+    const thumbFilename = `${id}-thumb.${thumbExt}`;
+    const buffer = Buffer.from(match[2], "base64");
+    const thumbBuffer = Buffer.from(thumbMatch[2], "base64");
+    await writeFile(path.join(uploadPath, filename), buffer);
+    await writeFile(path.join(thumbPath, thumbFilename), thumbBuffer);
+    return { url: `/uploads/${filename}`, thumbUrl: `/thumbs/${thumbFilename}` };
   }));
 
   res.status(201).json({ urls });
