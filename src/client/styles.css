@@ -278,9 +278,50 @@ input[type="file"]::file-selector-button {
   margin-top: 12px;
 }
 
-.record-images img {
+.record-image {
+  width: 96px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.record-image img {
   width: 78px;
   height: 58px;
+  border: 0;
+  border-radius: 0;
+}
+
+.record-image > a {
+  display: block;
+}
+
+.record-image img {
+  width: 100%;
+}
+
+.record-image figcaption {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--line);
+}
+
+.record-image figcaption a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 30px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.record-image figcaption a + a {
+  border-left: 1px solid var(--line);
 }
 
 .primary,

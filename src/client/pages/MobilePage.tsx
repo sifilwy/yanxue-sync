@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Loader2, Send, Smartphone } from "lucide-react";
 import type { Report, Role } from "../../shared/types";
-import { createReport } from "../api";
+import { createReport, uploadImages } from "../api";
 import { RecordImages } from "../components/RecordImages";
 import { Loading, Shell } from "../components/Layout";
 import { profileStorageKey } from "../constants";
@@ -100,6 +100,7 @@ export function MobilePage() {
     event.preventDefault();
     setSubmitting(true);
     try {
+      const uploaded = imageUrls.length ? await uploadImages(imageUrls) : { urls: [] };
       const created = await createReport({
         reporterName,
         reporterRole,
@@ -108,7 +109,7 @@ export function MobilePage() {
         pointId,
         category,
         content,
-        imageUrls,
+        imageUrls: uploaded.urls,
         isUrgent,
         affectsSettlement
       });

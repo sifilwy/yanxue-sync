@@ -24,6 +24,7 @@ type DbShape = {
 
 const dataDir = path.resolve(process.cwd(), "data");
 const dbPath = path.join(dataDir, "dev-db.json");
+const uploadDir = path.join(dataDir, "uploads");
 const maxInlineImageLength = 450_000;
 
 const defaultRoles: RoleOption[] = [
@@ -83,12 +84,49 @@ async function readDb(): Promise<DbShape> {
   try {
     const raw = await readFile(dbPath, "utf8");
     const db = normalizeDb(JSON.parse(raw) as Partial<DbShape>);
+    if (await migrateEmbeddedImages(db)) {
+      await writeDb(db);
+    }
     return db;
   } catch {
     const seeded = seedDb();
     await writeDb(seeded);
     return seeded;
   }
+}
+
+async function migrateEmbeddedImages(db: DbShape) {
+  let changed = false;
+  await mkdir(uploadDir, { recursive: true });
+
+  for (const report of db.reports) {
+    const nextUrls: string[] = [];
+    for (const url of report.imageUrls ?? []) {
+      if (!url.startsWith("data:image/")) {
+        nextUrls.push(url);
+        continue;
+      }
+
+      const savedUrl = await saveDataImage(url);
+      if (savedUrl) {
+        nextUrls.push(savedUrl);
+        changed = true;
+      }
+    }
+    report.imageUrls = nextUrls;
+  }
+
+  return changed;
+}
+
+async function saveDataImage(image: string) {
+  const match = image.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,(.+)$/);
+  if (!match) return null;
+
+  const ext = match[1].includes("png") ? "png" : match[1].includes("webp") ? "webp" : "jpg";
+  const filename = `${Date.now()}-${nanoid()}.${ext}`;
+  await writeFile(path.join(uploadDir, filename), Buffer.from(match[2], "base64"));
+  return `/uploads/${filename}`;
 }
 
 async function writeDb(db: DbShape) {

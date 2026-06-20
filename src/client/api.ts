@@ -48,6 +48,13 @@ export function createReport(input: {
   });
 }
 
+export function uploadImages(images: string[]) {
+  return request<{ urls: string[] }>("/api/uploads", {
+    method: "POST",
+    body: JSON.stringify({ images })
+  });
+}
+
 export function getReports(filters: {
   sessionId?: string;
   role?: string;

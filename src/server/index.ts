@@ -1,7 +1,9 @@
 import cors from "cors";
 import express from "express";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
   createReport,
@@ -25,9 +27,12 @@ const port = Number(process.env.PORT ?? 4000);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distPath = path.resolve(__dirname, "../../dist");
+const dataPath = path.resolve(process.cwd(), "data");
+const uploadPath = path.join(dataPath, "uploads");
 
 app.use(cors());
 app.use(express.json({ limit: "8mb" }));
+app.use("/uploads", express.static(uploadPath));
 
 const roleSchema = z.enum(["coach", "teacher", "guide", "supervisor"]);
 const statusSchema = z.enum(["open", "processing", "done"]);
@@ -75,12 +80,37 @@ const rolesSchema = z.object({
   roles: z.array(z.object({ value: roleSchema, label: z.string().min(1) })).length(4)
 });
 
+const uploadSchema = z.object({
+  images: z.array(z.string().startsWith("data:image/")).max(3)
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, name: "yanxue-sync-api" });
 });
 
 app.get("/api/bootstrap", async (_req, res) => {
   res.json(await getBootstrap());
+});
+
+app.post("/api/uploads", async (req, res) => {
+  const parsed = uploadSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "图片内容不完整", issues: parsed.error.issues });
+    return;
+  }
+
+  await mkdir(uploadPath, { recursive: true });
+  const urls = await Promise.all(parsed.data.images.map(async (image) => {
+    const match = image.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,(.+)$/);
+    if (!match) throw new Error("Unsupported image format");
+
+    const ext = match[1].includes("png") ? "png" : match[1].includes("webp") ? "webp" : "jpg";
+    const filename = `${Date.now()}-${nanoid()}.${ext}`;
+    await writeFile(path.join(uploadPath, filename), Buffer.from(match[2], "base64"));
+    return `/uploads/${filename}`;
+  }));
+
+  res.status(201).json({ urls });
 });
 
 app.post("/api/config/sessions", async (req, res) => {
