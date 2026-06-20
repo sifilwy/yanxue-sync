@@ -24,6 +24,7 @@ type DbShape = {
 
 const dataDir = path.resolve(process.cwd(), "data");
 const dbPath = path.join(dataDir, "dev-db.json");
+const maxInlineImageLength = 450_000;
 
 const defaultRoles: RoleOption[] = [
   { value: "coach", label: "教练" },
@@ -203,15 +204,24 @@ export async function listReports(filters: {
   role?: Role;
   category?: string;
   status?: ReportStatus;
-}) {
+}, options: { compactImages?: boolean } = { compactImages: true }) {
   const db = await readDb();
-  return db.reports.filter((report) => {
+  const reports = db.reports.filter((report) => {
     if (filters.sessionId && report.sessionId !== filters.sessionId) return false;
     if (filters.role && report.reporterRole !== filters.role) return false;
     if (filters.category && report.category !== filters.category) return false;
     if (filters.status && report.status !== filters.status) return false;
     return true;
   });
+
+  return options.compactImages === false ? reports : reports.map(compactReportForList);
+}
+
+function compactReportForList(report: Report): Report {
+  return {
+    ...report,
+    imageUrls: report.imageUrls.filter((url) => url.length <= maxInlineImageLength)
+  };
 }
 
 export async function updateReportStatus(id: string, status: ReportStatus) {

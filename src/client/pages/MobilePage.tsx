@@ -8,6 +8,13 @@ import { profileStorageKey } from "../constants";
 import { useBootstrap } from "../hooks/useBootstrap";
 import { filesToDataUrls } from "../utils/images";
 
+type SavedProfile = {
+  name?: string;
+  role?: Role;
+  sessionId?: string;
+  teamId?: string;
+};
+
 export function MobilePage() {
   const { data, error } = useBootstrap();
   const [reporterName, setReporterName] = useState("");
@@ -17,7 +24,7 @@ export function MobilePage() {
   const [sessionId, setSessionId] = useState("");
   const [teamId, setTeamId] = useState("");
   const [pointId, setPointId] = useState("");
-  const [category, setCategory] = useState("人员");
+  const [category, setCategory] = useState("");
   const [content, setContent] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [isUrgent, setIsUrgent] = useState(false);
@@ -25,39 +32,69 @@ export function MobilePage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState<Report[]>([]);
 
-  useEffect(() => {
-    const saved = window.localStorage.getItem(profileStorageKey);
-    if (!saved) {
-      setEditingProfile(true);
-      return;
-    }
-
-    try {
-      const profile = JSON.parse(saved) as { name?: string; role?: Role };
-      if (profile.name && profile.role) {
-        setReporterName(profile.name);
-        setReporterRole(profile.role);
-        setProfileReady(true);
-      } else {
-        setEditingProfile(true);
-      }
-    } catch {
-      setEditingProfile(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!data) return;
-    setSessionId(data.sessions[0]?.id ?? "");
-    setTeamId(data.teams[0]?.id ?? "");
-    setPointId(data.points[0]?.id ?? "");
-  }, [data]);
-
   const teams = useMemo(() => data?.teams.filter((item) => item.sessionId === sessionId) ?? [], [data, sessionId]);
   const points = useMemo(
     () => data?.points.filter((item) => item.sessionId === sessionId && (!teamId || item.teamId === teamId)) ?? [],
     [data, sessionId, teamId]
   );
+
+  const currentRoleLabel = data?.roles.find((role) => role.value === reporterRole)?.label ?? reporterRole;
+  const currentSessionName = data?.sessions.find((session) => session.id === sessionId)?.name ?? "";
+  const currentTeamName = data?.teams.find((team) => team.id === teamId)?.name ?? "";
+
+  useEffect(() => {
+    if (!data) return;
+
+    const defaultSessionId = data.sessions[0]?.id ?? "";
+    const defaultTeamId = data.teams.find((team) => team.sessionId === defaultSessionId)?.id ?? "";
+
+    try {
+      const saved = window.localStorage.getItem(profileStorageKey);
+      const profile = saved ? JSON.parse(saved) as SavedProfile : null;
+
+      if (profile?.name && profile.role && profile.sessionId && profile.teamId) {
+        setReporterName(profile.name);
+        setReporterRole(profile.role);
+        setSessionId(profile.sessionId);
+        setTeamId(profile.teamId);
+        setProfileReady(true);
+        setEditingProfile(false);
+        return;
+      }
+    } catch {
+      window.localStorage.removeItem(profileStorageKey);
+    }
+
+    setSessionId(defaultSessionId);
+    setTeamId(defaultTeamId);
+    setEditingProfile(true);
+  }, [data]);
+
+  useEffect(() => {
+    if (!data || !sessionId) return;
+    const sessionTeams = data.teams.filter((item) => item.sessionId === sessionId);
+    if (!teamId || !sessionTeams.some((item) => item.id === teamId)) {
+      setTeamId(sessionTeams[0]?.id ?? "");
+    }
+  }, [data, sessionId, teamId]);
+
+  useEffect(() => {
+    if (!points.length) {
+      setPointId("");
+      return;
+    }
+
+    if (!pointId || !points.some((item) => item.id === pointId)) {
+      setPointId(points[0].id);
+    }
+  }, [points, pointId]);
+
+  useEffect(() => {
+    if (!data?.categories.length) return;
+    if (!category || !data.categories.includes(category)) {
+      setCategory(data.categories[0]);
+    }
+  }, [data, category]);
 
   async function submitReport(event: React.FormEvent) {
     event.preventDefault();
@@ -87,7 +124,12 @@ export function MobilePage() {
 
   function saveProfile(event: React.FormEvent) {
     event.preventDefault();
-    window.localStorage.setItem(profileStorageKey, JSON.stringify({ name: reporterName, role: reporterRole }));
+    window.localStorage.setItem(profileStorageKey, JSON.stringify({
+      name: reporterName,
+      role: reporterRole,
+      sessionId,
+      teamId
+    }));
     setProfileReady(true);
     setEditingProfile(false);
   }
@@ -119,9 +161,10 @@ export function MobilePage() {
       {editingProfile || !profileReady ? (
         <form className="panel form" onSubmit={saveProfile}>
           <div>
-            <h2>先登录身份</h2>
-            <p className="muted">第一次填写后会记住，下次打开不用重复填。</p>
+            <h2>先填写固定信息</h2>
+            <p className="muted">姓名、身份、团期和队伍会保存在这台手机里，后面提交不用重复填写。</p>
           </div>
+
           <label>
             姓名
             <input value={reporterName} onChange={(event) => setReporterName(event.target.value)} placeholder="例如：张老师" required />
@@ -134,6 +177,20 @@ export function MobilePage() {
             </select>
           </label>
 
+          <label>
+            团期
+            <select value={sessionId} onChange={(event) => setSessionId(event.target.value)} required>
+              {data.sessions.map((session) => <option key={session.id} value={session.id}>{session.name}</option>)}
+            </select>
+          </label>
+
+          <label>
+            队伍
+            <select value={teamId} onChange={(event) => setTeamId(event.target.value)} required>
+              {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+            </select>
+          </label>
+
           <button className="primary">
             <CheckCircle2 size={18} />
             保存并进入
@@ -141,26 +198,12 @@ export function MobilePage() {
         </form>
       ) : (
         <div className="profile-bar">
-          <span>{reporterName} · {data.roles.find((role) => role.value === reporterRole)?.label}</span>
-          <button type="button" onClick={clearProfile}>切换身份</button>
+          <span>{reporterName} · {currentRoleLabel} · {currentSessionName} · {currentTeamName}</span>
+          <button type="button" onClick={clearProfile}>切换信息</button>
         </div>
       )}
 
       {profileReady && !editingProfile && <form className="panel form" onSubmit={submitReport}>
-        <label>
-          团期
-          <select value={sessionId} onChange={(event) => setSessionId(event.target.value)}>
-            {data.sessions.map((session) => <option key={session.id} value={session.id}>{session.name}</option>)}
-          </select>
-        </label>
-
-        <label>
-          队伍
-          <select value={teamId} onChange={(event) => setTeamId(event.target.value)}>
-            {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-          </select>
-        </label>
-
         <label>
           环节
           <select value={pointId} onChange={(event) => setPointId(event.target.value)}>

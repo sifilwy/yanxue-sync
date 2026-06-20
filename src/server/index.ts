@@ -181,7 +181,7 @@ app.patch("/api/reports/:id/status", async (req, res) => {
 });
 
 app.get("/api/reports/export", async (_req, res) => {
-  const [reports, lookups] = await Promise.all([listReports({}), getLookupMaps()]);
+  const [reports, lookups] = await Promise.all([listReports({}, { compactImages: false }), getLookupMaps()]);
   const rows = [
     ["提交时间", "团期", "队伍", "环节", "身份", "提交人", "类型", "状态", "紧急", "影响结算", "内容", "图片"],
     ...reports.map((report) => [
