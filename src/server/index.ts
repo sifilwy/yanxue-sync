@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
   createReport,
+  deleteReport,
   deletePoint,
   deleteSession,
   deleteTeam,
@@ -332,6 +333,11 @@ app.patch("/api/reports/:id/status", async (req, res) => {
   }
 
   res.json(updated);
+});
+
+app.delete("/api/reports/:id", async (req, res) => {
+  await deleteReport(req.params.id);
+  res.json({ ok: true });
 });
 
 app.get("/api/reports/export", async (_req, res) => {

@@ -95,6 +95,10 @@ export function updateReportStatus(id: string, status: ReportStatus) {
   });
 }
 
+export function deleteReport(id: string) {
+  return request<{ ok: true }>(`/api/reports/${id}`, { method: "DELETE" });
+}
+
 export function saveSession(input: Omit<CampSession, "id"> & { id?: string }) {
   return request<CampSession>("/api/config/sessions", {
     method: "POST",

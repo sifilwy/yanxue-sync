@@ -562,6 +562,12 @@ export async function updateReportStatus(id: string, status: ReportStatus) {
   return report;
 }
 
+export async function deleteReport(id: string) {
+  const db = await readDb();
+  db.reports = db.reports.filter((item) => item.id !== id);
+  await writeDb(db);
+}
+
 export async function getLookupMaps() {
   const db = await readDb();
   return {

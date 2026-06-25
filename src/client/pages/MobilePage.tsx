@@ -38,6 +38,7 @@ export function MobilePage() {
   const [attendanceDay, setAttendanceDay] = useState(1);
   const [attendancePointId, setAttendancePointId] = useState("");
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [attendanceGroup, setAttendanceGroup] = useState("");
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [attendanceDrafts, setAttendanceDrafts] = useState<Record<string, Pick<AttendanceRecord, "status" | "note">>>({});
   const [attendanceKeyword, setAttendanceKeyword] = useState("");
@@ -53,7 +54,7 @@ export function MobilePage() {
   const currentSessionName = data?.sessions.find((session) => session.id === sessionId)?.name ?? "";
   const currentTeamName = data?.teams.find((team) => team.id === teamId)?.name ?? "";
   const availableGroups = useMemo(() => Array.from(new Set(participants.map((item) => item.groupName))).filter(Boolean), [participants]);
-  const activeAttendanceGroup = availableGroups.includes(currentTeamName) ? currentTeamName : availableGroups[0] ?? "一团";
+  const activeAttendanceGroup = attendanceGroup || (availableGroups.includes(currentTeamName) ? currentTeamName : availableGroups[0] ?? "一团");
   const attendanceRecordMap = useMemo(() => new Map(attendanceRecords.map((item) => [item.participantId, item])), [attendanceRecords]);
   const attendanceDayPoints = useMemo(() => attendancePoints.filter((point) => point.dayIndex === attendanceDay), [attendancePoints, attendanceDay]);
   const attendancePeople = useMemo(() => participants
@@ -134,6 +135,8 @@ export function MobilePage() {
       const normalizedPoints = normalizeAttendancePoints(pointList);
       setAttendancePoints(normalizedPoints);
       setParticipants(participantList);
+      const groups = Array.from(new Set(participantList.map((item) => item.groupName))).filter(Boolean);
+      setAttendanceGroup((current) => current || (groups.includes(currentTeamName) ? currentTeamName : groups[0] ?? ""));
       const firstPointId = attendancePointId || normalizedPoints[0]?.id || "";
       if (!attendancePointId && firstPointId) setAttendancePointId(firstPointId);
       if (normalizedPoints[0]) setAttendanceDay(normalizedPoints[0].dayIndex);
@@ -398,10 +401,19 @@ export function MobilePage() {
                   <span>{attendanceMessage || `已到 ${attendanceSummary.present} / 未到 ${attendanceSummary.absent} / 未点 ${attendanceSummary.pending}`}</span>
                 </div>
                 {attendanceDayPoints.length === 0 && <p className="muted">当前天数还没有行程点。</p>}
+                {availableGroups.length > 0 && (
+                  <label className="mobile-attendance-group">
+                    名单
+                    <select value={activeAttendanceGroup} onChange={(event) => setAttendanceGroup(event.target.value)}>
+                      {availableGroups.map((group) => <option key={group} value={group}>{group}</option>)}
+                    </select>
+                  </label>
+                )}
                 <input className="people-search" placeholder="搜索序号、家长、电话、孩子姓名" value={attendanceKeyword} onChange={(event) => setAttendanceKeyword(event.target.value)} />
               </div>
 
               <div className="mobile-attendance-list">
+                {attendancePeople.length === 0 && <p className="muted">当前名单没有人员，请先在后台人员信息里录入。</p>}
                 {attendancePeople.map((participant) => {
                   const record = attendanceRecordMap.get(participant.id);
                   const draft = attendanceDrafts[participant.id];

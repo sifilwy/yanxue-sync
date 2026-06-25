@@ -15,6 +15,7 @@ import type {
 } from "../../shared/types";
 import {
   apiBase,
+  deleteReport,
   deleteParticipant,
   deletePoint,
   deleteSession,
@@ -205,6 +206,12 @@ function ReportsView({ data, reloadBootstrap }: { data: NonNullable<ReturnType<t
     await loadReports();
   }
 
+  async function removeReport(id: string) {
+    if (!window.confirm("确定删除这条记录吗？")) return;
+    await deleteReport(id);
+    await loadReports();
+  }
+
   const sessionName = (id: string) => data.sessions.find((item) => item.id === id)?.name ?? "";
   const teamName = (id?: string) => data.teams.find((item) => item.id === id)?.name ?? "";
   const pointName = (id?: string) => data.points.find((item) => item.id === id)?.name ?? "";
@@ -309,6 +316,7 @@ function ReportsView({ data, reloadBootstrap }: { data: NonNullable<ReturnType<t
                   <div className="actions">
                     <button onClick={() => setReportStatus(report.id, "processing")}>处理中</button>
                     <button onClick={() => setReportStatus(report.id, "done")}><CheckCircle2 size={15} />完成</button>
+                    <button className="danger-action" onClick={() => removeReport(report.id)}><Trash2 size={15} />删除</button>
                   </div>
                 </div>
               </article>
