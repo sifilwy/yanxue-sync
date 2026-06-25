@@ -49,6 +49,7 @@ import {
   genders,
   hasSecondChild,
   hasSecondParent,
+  inferFamilyType,
   includesKeyword,
   parentNames,
   parentPhones,
@@ -118,6 +119,49 @@ function familyTypePatch(draft: ParticipantDraft, familyType: string): Participa
       child2Size: ""
     })
   };
+}
+
+function normalizeParticipantDraft(item: Participant): ParticipantDraft {
+  const familyType = inferFamilyType(item);
+  return familyTypePatch({ ...item, familyType }, familyType);
+}
+
+function compareSequence(a: { sequence: string }, b: { sequence: string }) {
+  const sequenceA = Number(a.sequence);
+  const sequenceB = Number(b.sequence);
+  if (Number.isFinite(sequenceA) && Number.isFinite(sequenceB)) return sequenceA - sequenceB;
+  if (Number.isFinite(sequenceA)) return -1;
+  if (Number.isFinite(sequenceB)) return 1;
+  return String(a.sequence).localeCompare(String(b.sequence), "zh-Hans-CN", { numeric: true });
+}
+
+const peopleCacheKey = "yanxue-admin-people-cache";
+const attendanceCacheKey = "yanxue-admin-attendance-cache";
+
+function readPeopleCache() {
+  try {
+    const raw = window.localStorage.getItem(peopleCacheKey);
+    return raw ? JSON.parse(raw) as { staffMembers: StaffMember[]; participants: Participant[] } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePeopleCache(staffMembers: StaffMember[], participants: Participant[]) {
+  window.localStorage.setItem(peopleCacheKey, JSON.stringify({ staffMembers, participants }));
+}
+
+function readAttendanceCache() {
+  try {
+    const raw = window.localStorage.getItem(attendanceCacheKey);
+    return raw ? JSON.parse(raw) as { points: AttendancePoint[]; participants: Participant[] } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeAttendanceCache(points: AttendancePoint[], participants: Participant[]) {
+  window.localStorage.setItem(attendanceCacheKey, JSON.stringify({ points, participants }));
 }
 
 export function AdminPage() {
@@ -454,9 +498,15 @@ function PeopleViewPanel() {
   const [message, setMessage] = useState("");
 
   async function loadPeople() {
+    const cached = readPeopleCache();
+    if (cached) {
+      setStaffMembers(cached.staffMembers);
+      setParticipants(cached.participants);
+    }
     const [staff, studentList] = await Promise.all([getStaffMembers(), getParticipants()]);
     setStaffMembers(staff);
     setParticipants(studentList);
+    writePeopleCache(staff, studentList);
   }
 
   useEffect(() => {
@@ -475,7 +525,7 @@ function PeopleViewPanel() {
     item.idCard,
     item.gender,
     item.phone
-  ], keyword));
+  ], keyword)).sort(compareSequence);
   const filteredParticipants = participants.filter((item) => item.groupName === activeGroup && includesKeyword([
     item.sequence,
     item.familyType,
@@ -500,7 +550,7 @@ function PeopleViewPanel() {
     item.roomNumber,
     item.roomType,
     item.note
-  ], keyword));
+  ], keyword)).sort(compareSequence);
   const groupFamilyCount = participants.filter((item) => item.groupName === activeGroup && item.sequence).length;
   const groupStaffCount = staffMembers.filter((item) => item.groupName === activeGroup).length;
   const showSecondParent = hasSecondParent(participantDraft.familyType);
@@ -518,7 +568,7 @@ function PeopleViewPanel() {
   function editParticipant(item: Participant) {
     setActivePeopleView("participants");
     setActiveGroup(item.groupName);
-    setParticipantDraft({ ...item });
+    setParticipantDraft(normalizeParticipantDraft(item));
     setMessage(`正在编辑${item.sequence}号家庭`);
   }
 
@@ -556,7 +606,8 @@ function PeopleViewPanel() {
             setStaffDraft(emptyStaff(activeGroup));
             setMessage(isEditingStaff ? `${activeGroup}工作人员已更新` : `${activeGroup}工作人员已保存`);
           } else {
-            await saveParticipant(participantDraft);
+            const familyType = inferFamilyType(participantDraft);
+            await saveParticipant(familyTypePatch({ ...participantDraft, familyType }, familyType));
             setParticipantDraft(emptyParticipant(activeGroup));
             setMessage(isEditingParticipant ? `${activeGroup}家庭信息已更新` : `${activeGroup}家庭信息已保存`);
           }
@@ -848,6 +899,14 @@ function AttendanceViewPanel() {
   const [message, setMessage] = useState("");
 
   async function loadAttendance() {
+    const cached = readAttendanceCache();
+    if (cached) {
+      setPoints(cached.points);
+      setParticipants(cached.participants);
+      const cachedPointId = activePointId || cached.points[0]?.id || "";
+      if (!activePointId && cachedPointId) setActivePointId(cachedPointId);
+      if (cached.points[0]) setActiveDay(cached.points[0].dayIndex);
+    }
     const [pointList, participantList, summaryList] = await Promise.all([
       getAttendancePoints(),
       getParticipants(),
@@ -856,6 +915,7 @@ function AttendanceViewPanel() {
     setPoints(pointList);
     setParticipants(participantList);
     setSummaries(summaryList);
+    writeAttendanceCache(pointList, participantList);
     const pointId = activePointId || pointList[0]?.id || "";
     if (!activePointId && pointId) setActivePointId(pointId);
     if (pointList[0]) setActiveDay(pointList[0].dayIndex);
@@ -887,7 +947,7 @@ function AttendanceViewPanel() {
       item.child2Name,
       item.note
     ], keyword))
-    .sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
+    .sort(compareSequence);
 
   const recordMap = new Map(records.map((item) => [item.participantId, item]));
   const dayPoints = useMemo(() => points.filter((point) => point.dayIndex === activeDay), [points, activeDay]);
@@ -905,7 +965,7 @@ function AttendanceViewPanel() {
     childNames(summary.participant),
     summary.participant.note,
     ...summary.records.map((record) => record.note)
-  ], keyword));
+  ], keyword)).sort((a, b) => compareSequence(a.participant, b.participant));
 
   useEffect(() => {
     if (!dayPoints.length) return;

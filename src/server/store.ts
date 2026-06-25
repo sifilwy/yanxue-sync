@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nanoid } from "nanoid";
 import { attendanceProcessCount, buildDefaultAttendancePoints, defaultAttendanceProcessNames } from "../shared/attendance";
+import { hasSecondChild, hasSecondParent, inferFamilyType } from "../shared/people";
 import type {
   AttendanceFamilySummary,
   AttendancePoint,
@@ -155,7 +156,7 @@ function normalizeParticipant(item: Partial<Participant> & {
     id: item.id ?? nanoid(),
     groupName: item.groupName ?? "一团",
     sequence: item.sequence ?? "",
-    familyType: item.familyType ?? "1大1小",
+    familyType: inferFamilyType(item),
     parent1Name: item.parent1Name ?? item.parentName ?? "",
     parent1IdCard: item.parent1IdCard ?? "",
     parent1Phone: item.parent1Phone ?? item.parentPhone ?? "",
@@ -182,23 +183,20 @@ function normalizeParticipant(item: Partial<Participant> & {
   };
 }
 
-function hasSecondParent(familyType: string) {
-  return familyType.startsWith("2大");
-}
-
-function hasSecondChild(familyType: string) {
-  return familyType.endsWith("2小");
-}
-
 async function readDb(): Promise<DbShape> {
   try {
     const raw = await readFile(dbPath, "utf8");
     const db = normalizeDb(JSON.parse(raw) as Partial<DbShape>);
-    if (await migrateEmbeddedImages(db)) {
+    const sequenceChanged = ensureParticipantSequences(db);
+    const imageChanged = await migrateEmbeddedImages(db);
+    if (sequenceChanged || imageChanged) {
       await writeDb(db);
     }
     return db;
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
     const seeded = seedDb();
     await writeDb(seeded);
     return seeded;
@@ -228,6 +226,26 @@ async function migrateEmbeddedImages(db: DbShape) {
     }
     report.imageUrls = nextUrls;
     report.imageThumbUrls = nextThumbUrls;
+  }
+
+  return changed;
+}
+
+function ensureParticipantSequences(db: DbShape) {
+  let changed = false;
+  const groups = new Set(db.participants.map((item) => item.groupName || "一团"));
+
+  for (const groupName of groups) {
+    const groupParticipants = db.participants.filter((item) => (item.groupName || "一团") === groupName);
+    const used = new Set(groupParticipants.map((item) => Number(item.sequence)).filter(Number.isFinite));
+    let nextSequence = 1;
+
+    for (const participant of groupParticipants.filter((item) => !item.sequence.trim())) {
+      while (used.has(nextSequence)) nextSequence += 1;
+      participant.sequence = String(nextSequence);
+      used.add(nextSequence);
+      changed = true;
+    }
   }
 
   return changed;
@@ -397,7 +415,7 @@ export async function deleteStaffMember(id: string) {
 
 export async function listParticipants() {
   const db = await readDb();
-  return db.participants;
+  return sortParticipants(db.participants);
 }
 
 export async function saveParticipant(input: {
@@ -430,13 +448,14 @@ export async function saveParticipant(input: {
   const db = await readDb();
   const now = new Date().toISOString();
   const existing = input.id ? db.participants.find((item) => item.id === input.id) : null;
-  const keepSecondParent = hasSecondParent(input.familyType);
-  const keepSecondChild = hasSecondChild(input.familyType);
+  const familyType = inferFamilyType(input);
+  const keepSecondParent = hasSecondParent(familyType);
+  const keepSecondChild = hasSecondChild(familyType);
   const participant: Participant = {
     id: input.id || nanoid(),
     groupName: input.groupName,
     sequence: input.sequence,
-    familyType: input.familyType,
+    familyType,
     parent1Name: input.parent1Name,
     parent1IdCard: input.parent1IdCard,
     parent1Phone: input.parent1Phone,
@@ -463,7 +482,7 @@ export async function saveParticipant(input: {
   };
   const index = db.participants.findIndex((item) => item.id === participant.id);
   if (index >= 0) db.participants[index] = participant;
-  else db.participants.unshift(participant);
+  else db.participants.push(participant);
   await writeDb(db);
   return participant;
 }
@@ -489,7 +508,7 @@ export async function listAttendanceFamilySummaries(groupName?: string): Promise
   const db = await readDb();
   const participants = db.participants
     .filter((item) => !groupName || item.groupName === groupName)
-    .sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
+    .sort(compareSequence);
   const pointOrderMap = new Map(db.attendancePoints.map((point) => [point.id, point.sortOrder]));
   const recordsByParticipant = new Map<string, AttendanceRecord[]>();
 
@@ -602,4 +621,19 @@ export async function getLookupMaps() {
 
 export function roleLabel(role: Role) {
   return defaultRoles.find((item) => item.value === role)?.label ?? role;
+}
+
+function sortParticipants(participants: Participant[]) {
+  return [...participants].sort((a, b) => (
+    a.groupName.localeCompare(b.groupName, "zh-Hans-CN") || compareSequence(a, b)
+  ));
+}
+
+function compareSequence(a: { sequence: string }, b: { sequence: string }) {
+  const sequenceA = Number(a.sequence);
+  const sequenceB = Number(b.sequence);
+  if (Number.isFinite(sequenceA) && Number.isFinite(sequenceB)) return sequenceA - sequenceB;
+  if (Number.isFinite(sequenceA)) return -1;
+  if (Number.isFinite(sequenceB)) return 1;
+  return String(a.sequence).localeCompare(String(b.sequence), "zh-Hans-CN", { numeric: true });
 }

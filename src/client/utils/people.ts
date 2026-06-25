@@ -1,17 +1,5 @@
 import type { Participant } from "../../shared/types";
-
-export const peopleGroups = ["一团", "二团", "三团", "四团"];
-export const familyTypes = ["1大1小", "1大2小", "2大1小", "2大2小"];
-export const roomTypes = ["大床", "标间", "亲子房", "其他"];
-export const genders = ["男", "女"];
-
-export function hasSecondParent(familyType: string) {
-  return familyType.startsWith("2大");
-}
-
-export function hasSecondChild(familyType: string) {
-  return familyType.endsWith("2小");
-}
+export { familyTypes, genders, hasSecondChild, hasSecondParent, inferFamilyType, peopleGroups, roomTypes } from "../../shared/people";
 
 export function includesKeyword(values: string[], keyword: string) {
   const text = keyword.trim().toLowerCase();
