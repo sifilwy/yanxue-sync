@@ -948,28 +948,30 @@ function AttendanceViewPanel() {
         <button className={activeMode === "family" ? "active" : ""} type="button" onClick={() => setActiveMode("family")}>家庭总览</button>
       </section>
 
-      <section className="attendance-layout">
-        <aside className="panel attendance-points">
-          <div className="section-head">
-            <h2>行程点名</h2>
-            <span>7 天 × 8 流程</span>
-          </div>
-          <div className="attendance-day-list">
-            {Array.from({ length: attendanceDayCount }).map((_, index) => (
-              <button className={activeDay === index + 1 ? "active" : ""} key={index + 1} type="button" onClick={() => setActiveDay(index + 1)}>
-                第{index + 1}天
-              </button>
-            ))}
-          </div>
-          <div className="attendance-point-list">
-            {dayPoints.map((point) => (
-              <button className={activePointId === point.id ? "active" : ""} key={point.id} onClick={() => setActivePointId(point.id)}>
-                <span>{point.processIndex}</span>
-                <b>{point.name}</b>
-              </button>
-            ))}
-          </div>
-        </aside>
+      <section className={activeMode === "family" ? "attendance-layout family-mode" : "attendance-layout"}>
+        {activeMode === "point" && (
+          <aside className="panel attendance-points">
+            <div className="section-head">
+              <h2>行程点名</h2>
+              <span>7 天 × 8 流程</span>
+            </div>
+            <div className="attendance-day-list">
+              {Array.from({ length: attendanceDayCount }).map((_, index) => (
+                <button className={activeDay === index + 1 ? "active" : ""} key={index + 1} type="button" onClick={() => setActiveDay(index + 1)}>
+                  第{index + 1}天
+                </button>
+              ))}
+            </div>
+            <div className="attendance-point-list">
+              {dayPoints.map((point) => (
+                <button className={activePointId === point.id ? "active" : ""} key={point.id} onClick={() => setActivePointId(point.id)}>
+                  <span>{point.processIndex}</span>
+                  <b>{point.name}</b>
+                </button>
+              ))}
+            </div>
+          </aside>
+        )}
 
         <section className="panel attendance-panel">
           <div className="section-head">
