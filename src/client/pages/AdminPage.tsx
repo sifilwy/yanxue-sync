@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarCheck2, CheckCircle2, ClipboardList, Download, Plus, Save, Trash2, UsersRound } from "lucide-react";
 import type {
+  AttendanceFamilySummary,
   AttendancePoint,
   AttendanceRecord,
   AttendanceStatus,
@@ -22,6 +23,7 @@ import {
   deleteStaffMember,
   deleteTeam,
   getAttendancePoints,
+  getAttendanceFamilySummaries,
   getAttendanceRecords,
   getParticipants,
   getReports,
@@ -244,6 +246,10 @@ function ReportsView({ data, reloadBootstrap }: { data: NonNullable<ReturnType<t
         <a className="secondary" href={`${apiBase}/api/reports/export`}>
           <Download size={18} />
           导出
+        </a>
+        <a className="secondary" href={`${apiBase}/api/admin/export-data`}>
+          <Download size={18} />
+          完整备份
         </a>
       </section>
 
@@ -838,15 +844,23 @@ function AttendanceViewPanel() {
   const [activeDay, setActiveDay] = useState(1);
   const [activePointId, setActivePointId] = useState("");
   const [activeGroup, setActiveGroup] = useState(peopleGroups[0]);
+  const [activeMode, setActiveMode] = useState<"point" | "family">("point");
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [summaries, setSummaries] = useState<AttendanceFamilySummary[]>([]);
+  const [expandedFamilyId, setExpandedFamilyId] = useState("");
   const [keyword, setKeyword] = useState("");
   const [message, setMessage] = useState("");
 
   async function loadAttendance() {
-    const [pointList, participantList] = await Promise.all([getAttendancePoints(), getParticipants()]);
+    const [pointList, participantList, summaryList] = await Promise.all([
+      getAttendancePoints(),
+      getParticipants(),
+      getAttendanceFamilySummaries(activeGroup)
+    ]);
     setPoints(pointList);
     setParticipants(participantList);
+    setSummaries(summaryList);
     const pointId = activePointId || pointList[0]?.id || "";
     if (!activePointId && pointId) setActivePointId(pointId);
     if (pointList[0]) setActiveDay(pointList[0].dayIndex);
@@ -861,6 +875,10 @@ function AttendanceViewPanel() {
     if (!activePointId) return;
     getAttendanceRecords(activePointId).then(setRecords);
   }, [activePointId]);
+
+  useEffect(() => {
+    getAttendanceFamilySummaries(activeGroup).then(setSummaries);
+  }, [activeGroup]);
 
   const filteredParticipants = participants
     .filter((item) => item.groupName === activeGroup)
@@ -878,10 +896,21 @@ function AttendanceViewPanel() {
 
   const recordMap = new Map(records.map((item) => [item.participantId, item]));
   const dayPoints = useMemo(() => points.filter((point) => point.dayIndex === activeDay), [points, activeDay]);
+  const groupedPoints = useMemo(() => Array.from({ length: 7 }).map((_, index) => (
+    points.filter((point) => point.dayIndex === index + 1).sort((a, b) => a.processIndex - b.processIndex)
+  )), [points]);
   const presentCount = filteredParticipants.filter((item) => recordMap.get(item.id)?.status === "present").length;
   const absentCount = filteredParticipants.filter((item) => recordMap.get(item.id)?.status === "absent").length;
   const pendingCount = filteredParticipants.length - presentCount - absentCount;
   const absentParticipants = filteredParticipants.filter((item) => recordMap.get(item.id)?.status === "absent");
+  const filteredSummaries = summaries.filter((summary) => includesKeyword([
+    summary.participant.sequence,
+    parentNames(summary.participant),
+    parentPhones(summary.participant),
+    childNames(summary.participant),
+    summary.participant.note,
+    ...summary.records.map((record) => record.note)
+  ], keyword));
 
   useEffect(() => {
     if (!dayPoints.length) return;
@@ -904,6 +933,7 @@ function AttendanceViewPanel() {
       if (index >= 0) return items.map((item, itemIndex) => itemIndex === index ? next : item);
       return [...items, next];
     });
+    setSummaries(await getAttendanceFamilySummaries(activeGroup));
     setMessage("已保存");
   }
 
@@ -916,6 +946,11 @@ function AttendanceViewPanel() {
             <span>{participants.filter((item) => item.groupName === group).length} 户</span>
           </button>
         ))}
+      </section>
+
+      <section className="view-switch" aria-label="点名视图">
+        <button className={activeMode === "point" ? "active" : ""} type="button" onClick={() => setActiveMode("point")}>当前行程</button>
+        <button className={activeMode === "family" ? "active" : ""} type="button" onClick={() => setActiveMode("family")}>家庭总览</button>
       </section>
 
       <section className="attendance-layout">
@@ -943,63 +978,117 @@ function AttendanceViewPanel() {
 
         <section className="panel attendance-panel">
           <div className="section-head">
-            <h2>第{activeDay}天 · {points.find((item) => item.id === activePointId)?.name ?? "点名"}</h2>
-            <span>{message || `已到 ${presentCount} / 未到 ${absentCount} / 未点 ${pendingCount}`}</span>
-          </div>
-          <div className="absent-summary">
-            <b>未到名单</b>
-            {absentParticipants.length === 0 ? <span>暂无未到</span> : (
-              <p>{absentParticipants.map((item) => `${item.sequence}号 ${childNames(item)}（${parentNames(item)}）`).join("、")}</p>
-            )}
+            <h2>{activeMode === "point" ? `第${activeDay}天 · ${points.find((item) => item.id === activePointId)?.name ?? "点名"}` : `${activeGroup} · 家庭全程点名`}</h2>
+            <span>{activeMode === "point" ? (message || `已到 ${presentCount} / 未到 ${absentCount} / 未点 ${pendingCount}`) : `${filteredSummaries.length} 户 · 异常 ${filteredSummaries.filter((item) => item.absentCount > 0).length} 户`}</span>
           </div>
           <input className="people-search" placeholder="搜索序号、家长、电话或孩子姓名" value={keyword} onChange={(event) => setKeyword(event.target.value)} />
 
-          <div className="attendance-table-wrap">
-            <table className="attendance-table">
-              <colgroup>
-                <col className="att-sequence" />
-                <col className="att-parent" />
-                <col className="att-phone" />
-                <col className="att-child" />
-                <col className="att-status" />
-                <col className="att-note" />
-              </colgroup>
-              <thead>
-                <tr><th>序号</th><th>家长</th><th>号码</th><th>孩子姓名</th><th>点名</th><th>备注</th></tr>
-              </thead>
-              <tbody>
-                {filteredParticipants.map((participant) => {
-                  const record = recordMap.get(participant.id);
-                  const status = record?.status ?? "pending";
-                  return (
-                    <tr key={participant.id}>
-                      <td><span className="sequence-cell">{participant.sequence || "-"}</span></td>
-                      <td>{parentNames(participant)}</td>
-                      <td>{parentPhones(participant)}</td>
-                      <td>{childNames(participant)}</td>
-                      <td>
-                        <div className="attendance-status">
-                          {(["pending", "present", "absent"] as AttendanceStatus[]).map((item) => (
-                            <button className={status === item ? `active ${item}` : ""} key={item} type="button" onClick={() => updateAttendance(participant, { status: item })}>
-                              {attendanceStatusLabels[item]}
-                            </button>
-                          ))}
+          {activeMode === "point" ? (
+            <>
+              <div className="absent-summary">
+                <b>未到名单</b>
+                {absentParticipants.length === 0 ? <span>暂无未到</span> : (
+                  <p>{absentParticipants.map((item) => `${item.sequence}号 ${childNames(item)}（${parentNames(item)}）`).join("、")}</p>
+                )}
+              </div>
+              <div className="attendance-table-wrap">
+                <table className="attendance-table">
+                  <colgroup>
+                    <col className="att-sequence" />
+                    <col className="att-parent" />
+                    <col className="att-phone" />
+                    <col className="att-child" />
+                    <col className="att-status" />
+                    <col className="att-note" />
+                  </colgroup>
+                  <thead>
+                    <tr><th>序号</th><th>家长</th><th>号码</th><th>孩子姓名</th><th>点名</th><th>备注</th></tr>
+                  </thead>
+                  <tbody>
+                    {filteredParticipants.map((participant) => {
+                      const record = recordMap.get(participant.id);
+                      const status = record?.status ?? "pending";
+                      return (
+                        <tr key={participant.id}>
+                          <td><span className="sequence-cell">{participant.sequence || "-"}</span></td>
+                          <td>{parentNames(participant)}</td>
+                          <td>{parentPhones(participant)}</td>
+                          <td>{childNames(participant)}</td>
+                          <td>
+                            <div className="attendance-status">
+                              {(["pending", "present", "absent"] as AttendanceStatus[]).map((item) => (
+                                <button className={status === item ? `active ${item}` : ""} key={item} type="button" onClick={() => updateAttendance(participant, { status: item })}>
+                                  {attendanceStatusLabels[item]}
+                                </button>
+                              ))}
+                            </div>
+                          </td>
+                          <td>
+                            <textarea
+                              className="attendance-note"
+                              defaultValue={record?.note ?? ""}
+                              onBlur={(event) => updateAttendance(participant, { note: event.currentTarget.value })}
+                              placeholder="现场备注"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="family-summary-list">
+              {filteredSummaries.length === 0 && <p className="muted">当前团还没有家庭名单，请先在人员信息中录入。</p>}
+              {filteredSummaries.map((summary) => {
+                const isExpanded = expandedFamilyId === summary.participant.id;
+                return (
+                  <article className="family-summary-card" key={summary.participant.id}>
+                    <button className="family-summary-head" type="button" onClick={() => setExpandedFamilyId(isExpanded ? "" : summary.participant.id)}>
+                      <span className="sequence-cell">{summary.participant.sequence || "-"}</span>
+                      <strong>{childNames(summary.participant)}</strong>
+                      <small>{parentNames(summary.participant)} · {parentPhones(summary.participant)}</small>
+                      <b className={summary.absentCount > 0 ? "danger" : ""}>已到 {summary.presentCount} / 未到 {summary.absentCount} / 未点 {summary.pendingCount}</b>
+                    </button>
+                    <div className="family-attendance-grid">
+                      {groupedPoints.map((dayPointList, index) => (
+                        <div className="family-attendance-day" key={index + 1}>
+                          <span>第{index + 1}天</span>
+                          <div>
+                            {dayPointList.map((point) => {
+                              const record = summary.records.find((item) => item.pointId === point.id);
+                              const status = record?.status ?? "pending";
+                              return (
+                                <i className={`status-dot ${status}`} key={point.id} title={`${point.name}：${attendanceStatusLabels[status]}`}>
+                                  {point.processIndex}
+                                </i>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </td>
-                      <td>
-                        <textarea
-                          className="attendance-note"
-                          defaultValue={record?.note ?? ""}
-                          onBlur={(event) => updateAttendance(participant, { note: event.currentTarget.value })}
-                          placeholder="现场备注"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      ))}
+                    </div>
+                    {isExpanded && (
+                      <div className="family-detail">
+                        {points.map((point) => {
+                          const record = summary.records.find((item) => item.pointId === point.id);
+                          const status = record?.status ?? "pending";
+                          return (
+                            <div className="family-detail-row" key={point.id}>
+                              <span>第{point.dayIndex}天 · {point.name}</span>
+                              <b className={status}>{attendanceStatusLabels[status]}</b>
+                              <p>{record?.note || "-"}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </section>
       </section>
     </>

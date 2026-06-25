@@ -116,6 +116,15 @@ export type AttendanceRecordInput = {
   note: string;
 };
 
+export type AttendanceFamilySummary = {
+  participant: Participant;
+  records: AttendanceRecord[];
+  presentCount: number;
+  absentCount: number;
+  pendingCount: number;
+  lastUpdatedAt: string;
+};
+
 export type BootstrapData = {
   sessions: CampSession[];
   teams: Team[];

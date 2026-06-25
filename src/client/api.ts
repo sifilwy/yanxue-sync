@@ -1,4 +1,5 @@
 import type {
+  AttendanceFamilySummary,
   AttendancePoint,
   AttendanceRecord,
   AttendanceRecordInput,
@@ -184,6 +185,12 @@ export function getAttendanceRecords(pointId?: string) {
   const params = new URLSearchParams();
   if (pointId) params.set("pointId", pointId);
   return request<AttendanceRecord[]>(`/api/attendance/records?${params.toString()}`);
+}
+
+export function getAttendanceFamilySummaries(groupName?: string) {
+  const params = new URLSearchParams();
+  if (groupName) params.set("groupName", groupName);
+  return request<AttendanceFamilySummary[]>(`/api/attendance/family-summaries?${params.toString()}`);
 }
 
 export function saveAttendanceRecord(input: AttendanceRecordInput) {

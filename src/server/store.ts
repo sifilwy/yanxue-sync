@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nanoid } from "nanoid";
 import type {
+  AttendanceFamilySummary,
   AttendancePoint,
   AttendanceRecord,
   AttendanceRecordInput,
@@ -500,6 +501,43 @@ export async function listAttendancePoints() {
 export async function listAttendanceRecords(pointId?: string) {
   const db = await readDb();
   return pointId ? db.attendanceRecords.filter((item) => item.pointId === pointId) : db.attendanceRecords;
+}
+
+export async function listAttendanceFamilySummaries(groupName?: string): Promise<AttendanceFamilySummary[]> {
+  const db = await readDb();
+  const participants = db.participants
+    .filter((item) => !groupName || item.groupName === groupName)
+    .sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
+  const pointIds = new Set(db.attendancePoints.map((point) => point.id));
+
+  return participants.map((participant) => {
+    const records = db.attendanceRecords
+      .filter((record) => record.participantId === participant.id && pointIds.has(record.pointId))
+      .sort((a, b) => {
+        const pointA = db.attendancePoints.find((point) => point.id === a.pointId)?.sortOrder ?? 0;
+        const pointB = db.attendancePoints.find((point) => point.id === b.pointId)?.sortOrder ?? 0;
+        return pointA - pointB;
+      });
+    const presentCount = records.filter((record) => record.status === "present").length;
+    const absentCount = records.filter((record) => record.status === "absent").length;
+    const pendingCount = db.attendancePoints.length - presentCount - absentCount;
+    const lastUpdatedAt = records.reduce((latest, record) => (
+      record.updatedAt > latest ? record.updatedAt : latest
+    ), "");
+
+    return {
+      participant,
+      records,
+      presentCount,
+      absentCount,
+      pendingCount,
+      lastUpdatedAt
+    };
+  });
+}
+
+export async function getFullDataExport() {
+  return readDb();
 }
 
 export async function saveAttendanceRecord(input: AttendanceRecordInput) {

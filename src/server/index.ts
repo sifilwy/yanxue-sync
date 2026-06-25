@@ -12,7 +12,9 @@ import {
   deleteSession,
   deleteTeam,
   getBootstrap,
+  getFullDataExport,
   getLookupMaps,
+  listAttendanceFamilySummaries,
   listParticipants,
   listReports,
   listStaffMembers,
@@ -229,6 +231,11 @@ app.get("/api/attendance/records", async (req, res) => {
   res.json(await listAttendanceRecords(pointId));
 });
 
+app.get("/api/attendance/family-summaries", async (req, res) => {
+  const groupName = typeof req.query.groupName === "string" ? req.query.groupName : undefined;
+  res.json(await listAttendanceFamilySummaries(groupName));
+});
+
 app.post("/api/attendance/records", async (req, res) => {
   const parsed = attendanceRecordSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -364,6 +371,11 @@ app.get("/api/reports/export", async (_req, res) => {
   res.header("Content-Type", "text/csv; charset=utf-8");
   res.attachment("yanxue-reports.csv");
   res.send(`\uFEFF${csv}`);
+});
+
+app.get("/api/admin/export-data", async (_req, res) => {
+  res.attachment(`yanxue-full-data-${new Date().toISOString().slice(0, 10)}.json`);
+  res.json(await getFullDataExport());
 });
 
 app.use(express.static(distPath));
