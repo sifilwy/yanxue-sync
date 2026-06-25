@@ -67,6 +67,8 @@ export function MobilePage() {
       item.parent1Phone,
       item.parent2Name,
       item.parent2Phone,
+      item.parent3Name,
+      item.parent3Phone,
       item.childName,
       item.child2Name
     ], attendanceKeyword))

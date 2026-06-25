@@ -73,6 +73,9 @@ export type Participant = {
   parent2Name: string;
   parent2IdCard: string;
   parent2Phone: string;
+  parent3Name: string;
+  parent3IdCard: string;
+  parent3Phone: string;
   childName: string;
   childIdCard: string;
   childGender: string;

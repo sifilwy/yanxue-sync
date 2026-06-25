@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nanoid } from "nanoid";
 import { attendanceProcessCount, buildDefaultAttendancePoints, defaultAttendanceProcessNames } from "../shared/attendance";
-import { hasSecondChild, hasSecondParent, inferFamilyType } from "../shared/people";
+import { hasSecondChild, hasSecondParent, hasThirdParent, inferFamilyType } from "../shared/people";
 import type {
   AttendanceFamilySummary,
   AttendancePoint,
@@ -163,6 +163,9 @@ function normalizeParticipant(item: Partial<Participant> & {
     parent2Name: item.parent2Name ?? "",
     parent2IdCard: item.parent2IdCard ?? "",
     parent2Phone: item.parent2Phone ?? "",
+    parent3Name: item.parent3Name ?? "",
+    parent3IdCard: item.parent3IdCard ?? "",
+    parent3Phone: item.parent3Phone ?? "",
     childName: item.childName ?? item.name ?? "",
     childIdCard: item.childIdCard ?? "",
     childGender: item.childGender ?? "",
@@ -429,6 +432,9 @@ export async function saveParticipant(input: {
   parent2Name: string;
   parent2IdCard: string;
   parent2Phone: string;
+  parent3Name: string;
+  parent3IdCard: string;
+  parent3Phone: string;
   childName: string;
   childIdCard: string;
   childGender: string;
@@ -450,6 +456,7 @@ export async function saveParticipant(input: {
   const existing = input.id ? db.participants.find((item) => item.id === input.id) : null;
   const familyType = inferFamilyType(input);
   const keepSecondParent = hasSecondParent(familyType);
+  const keepThirdParent = hasThirdParent(familyType);
   const keepSecondChild = hasSecondChild(familyType);
   const participant: Participant = {
     id: input.id || nanoid(),
@@ -462,6 +469,9 @@ export async function saveParticipant(input: {
     parent2Name: keepSecondParent ? input.parent2Name : "",
     parent2IdCard: keepSecondParent ? input.parent2IdCard : "",
     parent2Phone: keepSecondParent ? input.parent2Phone : "",
+    parent3Name: keepThirdParent ? input.parent3Name : "",
+    parent3IdCard: keepThirdParent ? input.parent3IdCard : "",
+    parent3Phone: keepThirdParent ? input.parent3Phone : "",
     childName: input.childName,
     childIdCard: input.childIdCard,
     childGender: input.childGender,

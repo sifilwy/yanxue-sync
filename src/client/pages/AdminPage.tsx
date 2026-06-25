@@ -49,8 +49,10 @@ import {
   genders,
   hasSecondChild,
   hasSecondParent,
+  hasThirdParent,
   inferFamilyType,
   includesKeyword,
+  isIndependentCamp,
   parentNames,
   parentPhones,
   peopleGroups,
@@ -88,6 +90,9 @@ const emptyParticipant = (groupName = "一团"): ParticipantDraft => ({
   parent2Name: "",
   parent2IdCard: "",
   parent2Phone: "",
+  parent3Name: "",
+  parent3IdCard: "",
+  parent3Phone: "",
   childName: "",
   childIdCard: "",
   childGender: "",
@@ -110,6 +115,7 @@ function familyTypePatch(draft: ParticipantDraft, familyType: string): Participa
     ...draft,
     familyType,
     ...(hasSecondParent(familyType) ? {} : { parent2Name: "", parent2IdCard: "", parent2Phone: "" }),
+    ...(hasThirdParent(familyType) ? {} : { parent3Name: "", parent3IdCard: "", parent3Phone: "" }),
     ...(hasSecondChild(familyType) ? {} : {
       child2Name: "",
       child2IdCard: "",
@@ -535,6 +541,9 @@ function PeopleViewPanel() {
     item.parent2Name,
     item.parent2IdCard,
     item.parent2Phone,
+    item.parent3Name,
+    item.parent3IdCard,
+    item.parent3Phone,
     item.childName,
     item.childIdCard,
     item.childGender,
@@ -554,6 +563,7 @@ function PeopleViewPanel() {
   const groupFamilyCount = participants.filter((item) => item.groupName === activeGroup && item.sequence).length;
   const groupStaffCount = staffMembers.filter((item) => item.groupName === activeGroup).length;
   const showSecondParent = hasSecondParent(participantDraft.familyType);
+  const showThirdParent = hasThirdParent(participantDraft.familyType);
   const showSecondChild = hasSecondChild(participantDraft.familyType);
   const isEditingStaff = Boolean(staffDraft.id);
   const isEditingParticipant = Boolean(participantDraft.id);
@@ -666,9 +676,9 @@ function PeopleViewPanel() {
                   </select>
                 </label>
               </div>
-              <div className={showSecondParent ? "split-form-block" : "form-block"}>
+              <div className={showSecondParent || showThirdParent ? "split-form-block" : "form-block"}>
                 <div className="split-form-section">
-                  <b>{showSecondParent ? "家长 1" : "家长"}</b>
+                  <b>{showSecondParent || showThirdParent ? "家长 1" : "家长"}{isIndependentCamp(participantDraft.familyType) ? " · 独" : ""}</b>
                   <label>
                     姓名
                     <input value={participantDraft.parent1Name} onChange={(event) => setParticipantDraft({ ...participantDraft, parent1Name: event.target.value })} />
@@ -696,6 +706,23 @@ function PeopleViewPanel() {
                     <label>
                       手机号
                       <input value={participantDraft.parent2Phone} onChange={(event) => setParticipantDraft({ ...participantDraft, parent2Phone: event.target.value })} />
+                    </label>
+                  </div>
+                )}
+                {showThirdParent && (
+                  <div className="split-form-section">
+                    <b>家长 3</b>
+                    <label>
+                      姓名
+                      <input value={participantDraft.parent3Name} onChange={(event) => setParticipantDraft({ ...participantDraft, parent3Name: event.target.value })} />
+                    </label>
+                    <label>
+                      身份证号
+                      <input value={participantDraft.parent3IdCard} onChange={(event) => setParticipantDraft({ ...participantDraft, parent3IdCard: event.target.value })} />
+                    </label>
+                    <label>
+                      手机号
+                      <input value={participantDraft.parent3Phone} onChange={(event) => setParticipantDraft({ ...participantDraft, parent3Phone: event.target.value })} />
                     </label>
                   </div>
                 )}
@@ -848,11 +875,12 @@ function PeopleViewPanel() {
                   {filteredParticipants.map((item) => (
                     <tr key={item.id}>
                       <td><span className="sequence-cell">{item.sequence || "-"}</span></td>
-                      <td>{item.familyType}</td>
+                      <td>{isIndependentCamp(item.familyType) ? <span className="tag warn">独</span> : item.familyType}</td>
                       <td>
                         <div className="multi-line-cell">
                           <span title={item.parent1IdCard}><b>{item.parent1Name || "-"}</b><small>{item.parent1Phone || "-"}</small></span>
                           {hasSecondParent(item.familyType) && <span title={item.parent2IdCard}><b>{item.parent2Name || "-"}</b><small>{item.parent2Phone || "-"}</small></span>}
+                          {hasThirdParent(item.familyType) && <span title={item.parent3IdCard}><b>{item.parent3Name || "-"}</b><small>{item.parent3Phone || "-"}</small></span>}
                         </div>
                       </td>
                       <td>
@@ -943,6 +971,8 @@ function AttendanceViewPanel() {
       item.parent1Phone,
       item.parent2Name,
       item.parent2Phone,
+      item.parent3Name,
+      item.parent3Phone,
       item.childName,
       item.child2Name,
       item.note

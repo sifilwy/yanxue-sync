@@ -1,5 +1,5 @@
 import type { Participant } from "../../shared/types";
-export { familyTypes, genders, hasSecondChild, hasSecondParent, inferFamilyType, peopleGroups, roomTypes } from "../../shared/people";
+export { familyTypes, genders, hasSecondChild, hasSecondParent, hasThirdParent, inferFamilyType, isIndependentCamp, peopleGroups, roomTypes } from "../../shared/people";
 
 export function includesKeyword(values: string[], keyword: string) {
   const text = keyword.trim().toLowerCase();
@@ -12,11 +12,11 @@ export function sortBySequence<T extends { sequence: string }>(items: T[]) {
 }
 
 export function parentNames(item: Participant) {
-  return [item.parent1Name, item.parent2Name].filter(Boolean).join(" / ") || "-";
+  return [item.parent1Name, item.parent2Name, item.parent3Name].filter(Boolean).join(" / ") || "-";
 }
 
 export function parentPhones(item: Participant) {
-  return [item.parent1Phone, item.parent2Phone].filter(Boolean).join(" / ") || "-";
+  return [item.parent1Phone, item.parent2Phone, item.parent3Phone].filter(Boolean).join(" / ") || "-";
 }
 
 export function childNames(item: Participant) {
