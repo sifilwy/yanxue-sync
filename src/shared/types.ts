@@ -1,6 +1,7 @@
 export type Role = "coach" | "teacher" | "guide" | "supervisor";
 
 export type ReportStatus = "open" | "processing" | "done";
+export type AttendanceStatus = "pending" | "present" | "absent";
 
 export type User = {
   id: string;
@@ -50,7 +51,12 @@ export type Report = {
 
 export type StaffMember = {
   id: string;
+  groupName: string;
+  sequence: string;
+  type: string;
   name: string;
+  idCard: string;
+  gender: string;
   phone: string;
   createdAt: string;
   updatedAt: string;
@@ -58,13 +64,56 @@ export type StaffMember = {
 
 export type Participant = {
   id: string;
-  name: string;
-  phone: string;
+  groupName: string;
+  sequence: string;
+  familyType: string;
+  parent1Name: string;
+  parent1IdCard: string;
+  parent1Phone: string;
+  parent2Name: string;
+  parent2IdCard: string;
+  parent2Phone: string;
+  childName: string;
+  childIdCard: string;
+  childGender: string;
+  childHeight: string;
+  childWeight: string;
+  childSize: string;
+  child2Name: string;
+  child2IdCard: string;
+  child2Gender: string;
+  child2Height: string;
+  child2Weight: string;
+  child2Size: string;
   roomNumber: string;
-  parentName: string;
-  parentPhone: string;
+  roomType: string;
+  note: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type AttendancePoint = {
+  id: string;
+  name: string;
+  dayIndex: number;
+  processIndex: number;
+  sortOrder: number;
+};
+
+export type AttendanceRecord = {
+  id: string;
+  pointId: string;
+  participantId: string;
+  status: AttendanceStatus;
+  note: string;
+  updatedAt: string;
+};
+
+export type AttendanceRecordInput = {
+  pointId: string;
+  participantId: string;
+  status: AttendanceStatus;
+  note: string;
 };
 
 export type BootstrapData = {

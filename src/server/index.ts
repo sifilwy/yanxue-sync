@@ -25,6 +25,9 @@ import {
   saveTeam,
   deleteParticipant,
   deleteStaffMember,
+  listAttendancePoints,
+  listAttendanceRecords,
+  saveAttendanceRecord,
   updateReportStatus
 } from "./store";
 
@@ -44,6 +47,7 @@ app.use("/thumbs", express.static(thumbPath));
 
 const roleSchema = z.enum(["coach", "teacher", "guide", "supervisor"]);
 const statusSchema = z.enum(["open", "processing", "done"]);
+const attendanceStatusSchema = z.enum(["pending", "present", "absent"]);
 
 const createReportSchema = z.object({
   reporterName: z.string().min(1),
@@ -96,17 +100,48 @@ const uploadSchema = z.object({
 
 const staffSchema = z.object({
   id: z.string().optional(),
+  groupName: z.string().min(1).default("一团"),
+  sequence: z.string().default(""),
+  type: z.string().default("工作人员"),
   name: z.string().min(1),
+  idCard: z.string().default(""),
+  gender: z.string().default(""),
   phone: z.string().default("")
 });
 
 const participantSchema = z.object({
   id: z.string().optional(),
-  name: z.string().min(1),
-  phone: z.string().default(""),
+  groupName: z.string().min(1).default("一团"),
+  sequence: z.string().default(""),
+  familyType: z.string().min(1).default("1大1小"),
+  parent1Name: z.string().default(""),
+  parent1IdCard: z.string().default(""),
+  parent1Phone: z.string().default(""),
+  parent2Name: z.string().default(""),
+  parent2IdCard: z.string().default(""),
+  parent2Phone: z.string().default(""),
+  childName: z.string().min(1),
+  childIdCard: z.string().default(""),
+  childGender: z.string().default(""),
+  childHeight: z.string().default(""),
+  childWeight: z.string().default(""),
+  childSize: z.string().default(""),
+  child2Name: z.string().default(""),
+  child2IdCard: z.string().default(""),
+  child2Gender: z.string().default(""),
+  child2Height: z.string().default(""),
+  child2Weight: z.string().default(""),
+  child2Size: z.string().default(""),
   roomNumber: z.string().default(""),
-  parentName: z.string().default(""),
-  parentPhone: z.string().default("")
+  roomType: z.string().default(""),
+  note: z.string().default("")
+});
+
+const attendanceRecordSchema = z.object({
+  pointId: z.string().min(1),
+  participantId: z.string().min(1),
+  status: attendanceStatusSchema,
+  note: z.string().default("")
 });
 
 app.get("/api/health", (_req, res) => {
@@ -182,6 +217,24 @@ app.post("/api/people/participants", async (req, res) => {
 app.delete("/api/people/participants/:id", async (req, res) => {
   await deleteParticipant(req.params.id);
   res.json({ ok: true });
+});
+
+app.get("/api/attendance/points", async (_req, res) => {
+  res.json(await listAttendancePoints());
+});
+
+app.get("/api/attendance/records", async (req, res) => {
+  const pointId = typeof req.query.pointId === "string" ? req.query.pointId : undefined;
+  res.json(await listAttendanceRecords(pointId));
+});
+
+app.post("/api/attendance/records", async (req, res) => {
+  const parsed = attendanceRecordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "点名信息不完整", issues: parsed.error.issues });
+    return;
+  }
+  res.json(await saveAttendanceRecord(parsed.data));
 });
 
 app.post("/api/config/sessions", async (req, res) => {

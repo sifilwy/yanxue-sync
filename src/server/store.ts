@@ -2,6 +2,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nanoid } from "nanoid";
 import type {
+  AttendancePoint,
+  AttendanceRecord,
+  AttendanceRecordInput,
   BootstrapData,
   CampSession,
   ItineraryPoint,
@@ -24,6 +27,8 @@ type DbShape = {
   reports: Report[];
   staffMembers: StaffMember[];
   participants: Participant[];
+  attendancePoints: AttendancePoint[];
+  attendanceRecords: AttendanceRecord[];
 };
 
 const dataDir = path.resolve(process.cwd(), "data");
@@ -39,6 +44,16 @@ const defaultRoles: RoleOption[] = [
 ];
 
 const defaultCategories = ["人员", "餐饮", "景点", "交通", "酒店", "家长反馈", "学生情况", "老师情况", "其他"];
+const defaultAttendanceProcessNames = [
+  "集合出发",
+  "上车点名",
+  "抵达场馆",
+  "上午活动",
+  "午餐集合",
+  "下午活动",
+  "返程上车",
+  "回到酒店"
+];
 
 function seedDb(): DbShape {
   const sessionId = nanoid();
@@ -71,11 +86,26 @@ function seedDb(): DbShape {
     roles: defaultRoles,
     reports: [],
     staffMembers: [],
-    participants: []
+    participants: [],
+    attendancePoints: seedAttendancePoints(),
+    attendanceRecords: []
   };
 }
 
+function seedAttendancePoints() {
+  return Array.from({ length: 7 }).flatMap((_, dayIndex) => (
+    defaultAttendanceProcessNames.map((name, processIndex) => ({
+      id: `attendance-d${dayIndex + 1}-p${processIndex + 1}`,
+      name,
+      dayIndex: dayIndex + 1,
+      processIndex: processIndex + 1,
+      sortOrder: dayIndex * defaultAttendanceProcessNames.length + processIndex + 1
+    }))
+  ));
+}
+
 function normalizeDb(db: Partial<DbShape>): DbShape {
+  const attendancePoints = db.attendancePoints?.length && db.attendancePoints.length >= 56 ? db.attendancePoints : seedAttendancePoints();
   return {
     sessions: db.sessions ?? [],
     teams: db.teams ?? [],
@@ -83,9 +113,98 @@ function normalizeDb(db: Partial<DbShape>): DbShape {
     categories: db.categories?.length ? db.categories : defaultCategories,
     roles: db.roles?.length ? db.roles : defaultRoles,
     reports: db.reports ?? [],
-    staffMembers: db.staffMembers ?? [],
-    participants: db.participants ?? []
+    staffMembers: (db.staffMembers ?? []).map(normalizeStaffMember),
+    participants: (db.participants ?? []).map(normalizeParticipant),
+    attendancePoints: attendancePoints.map(normalizeAttendancePoint),
+    attendanceRecords: (db.attendanceRecords ?? []).map(normalizeAttendanceRecord)
   };
+}
+
+function normalizeAttendancePoint(item: Partial<AttendancePoint>, index = 0): AttendancePoint {
+  const sortOrder = item.sortOrder ?? index + 1;
+  const zeroIndex = sortOrder - 1;
+  const dayIndex = item.dayIndex ?? Math.floor(zeroIndex / defaultAttendanceProcessNames.length) + 1;
+  const processIndex = item.processIndex ?? (zeroIndex % defaultAttendanceProcessNames.length) + 1;
+  return {
+    id: item.id ?? `attendance-d${dayIndex}-p${processIndex}`,
+    name: item.name ?? defaultAttendanceProcessNames[processIndex - 1] ?? `流程${processIndex}`,
+    dayIndex,
+    processIndex,
+    sortOrder
+  };
+}
+
+function normalizeAttendanceRecord(item: Partial<AttendanceRecord>): AttendanceRecord {
+  return {
+    id: item.id ?? nanoid(),
+    pointId: item.pointId ?? "",
+    participantId: item.participantId ?? "",
+    status: item.status ?? "pending",
+    note: item.note ?? "",
+    updatedAt: item.updatedAt ?? new Date().toISOString()
+  };
+}
+
+function normalizeStaffMember(item: Partial<StaffMember>): StaffMember {
+  const now = new Date().toISOString();
+  return {
+    id: item.id ?? nanoid(),
+    groupName: item.groupName ?? "一团",
+    sequence: item.sequence ?? "",
+    type: item.type ?? "工作人员",
+    name: item.name ?? "",
+    idCard: item.idCard ?? "",
+    gender: item.gender ?? "",
+    phone: item.phone ?? "",
+    createdAt: item.createdAt ?? now,
+    updatedAt: item.updatedAt ?? now
+  };
+}
+
+function normalizeParticipant(item: Partial<Participant> & {
+  name?: string;
+  phone?: string;
+  parentName?: string;
+  parentPhone?: string;
+}): Participant {
+  const now = new Date().toISOString();
+  return {
+    id: item.id ?? nanoid(),
+    groupName: item.groupName ?? "一团",
+    sequence: item.sequence ?? "",
+    familyType: item.familyType ?? "1大1小",
+    parent1Name: item.parent1Name ?? item.parentName ?? "",
+    parent1IdCard: item.parent1IdCard ?? "",
+    parent1Phone: item.parent1Phone ?? item.parentPhone ?? "",
+    parent2Name: item.parent2Name ?? "",
+    parent2IdCard: item.parent2IdCard ?? "",
+    parent2Phone: item.parent2Phone ?? "",
+    childName: item.childName ?? item.name ?? "",
+    childIdCard: item.childIdCard ?? "",
+    childGender: item.childGender ?? "",
+    childHeight: item.childHeight ?? "",
+    childWeight: item.childWeight ?? "",
+    childSize: item.childSize ?? "",
+    child2Name: item.child2Name ?? "",
+    child2IdCard: item.child2IdCard ?? "",
+    child2Gender: item.child2Gender ?? "",
+    child2Height: item.child2Height ?? "",
+    child2Weight: item.child2Weight ?? "",
+    child2Size: item.child2Size ?? "",
+    roomNumber: item.roomNumber ?? "",
+    roomType: item.roomType ?? "",
+    note: item.note ?? "",
+    createdAt: item.createdAt ?? now,
+    updatedAt: item.updatedAt ?? now
+  };
+}
+
+function hasSecondParent(familyType: string) {
+  return familyType.startsWith("2大");
+}
+
+function hasSecondChild(familyType: string) {
+  return familyType.endsWith("2小");
 }
 
 async function readDb(): Promise<DbShape> {
@@ -255,13 +374,27 @@ export async function listStaffMembers() {
   return db.staffMembers;
 }
 
-export async function saveStaffMember(input: { id?: string; name: string; phone: string }) {
+export async function saveStaffMember(input: {
+  id?: string;
+  groupName: string;
+  sequence: string;
+  type: string;
+  name: string;
+  idCard: string;
+  gender: string;
+  phone: string;
+}) {
   const db = await readDb();
   const now = new Date().toISOString();
   const existing = input.id ? db.staffMembers.find((item) => item.id === input.id) : null;
   const staff: StaffMember = {
     id: input.id || nanoid(),
+    groupName: input.groupName,
+    sequence: input.sequence,
+    type: input.type,
     name: input.name,
+    idCard: input.idCard,
+    gender: input.gender,
     phone: input.phone,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now
@@ -286,22 +419,62 @@ export async function listParticipants() {
 
 export async function saveParticipant(input: {
   id?: string;
-  name: string;
-  phone: string;
+  groupName: string;
+  sequence: string;
+  familyType: string;
+  parent1Name: string;
+  parent1IdCard: string;
+  parent1Phone: string;
+  parent2Name: string;
+  parent2IdCard: string;
+  parent2Phone: string;
+  childName: string;
+  childIdCard: string;
+  childGender: string;
+  childHeight: string;
+  childWeight: string;
+  childSize: string;
+  child2Name: string;
+  child2IdCard: string;
+  child2Gender: string;
+  child2Height: string;
+  child2Weight: string;
+  child2Size: string;
   roomNumber: string;
-  parentName: string;
-  parentPhone: string;
+  roomType: string;
+  note: string;
 }) {
   const db = await readDb();
   const now = new Date().toISOString();
   const existing = input.id ? db.participants.find((item) => item.id === input.id) : null;
+  const keepSecondParent = hasSecondParent(input.familyType);
+  const keepSecondChild = hasSecondChild(input.familyType);
   const participant: Participant = {
     id: input.id || nanoid(),
-    name: input.name,
-    phone: input.phone,
+    groupName: input.groupName,
+    sequence: input.sequence,
+    familyType: input.familyType,
+    parent1Name: input.parent1Name,
+    parent1IdCard: input.parent1IdCard,
+    parent1Phone: input.parent1Phone,
+    parent2Name: keepSecondParent ? input.parent2Name : "",
+    parent2IdCard: keepSecondParent ? input.parent2IdCard : "",
+    parent2Phone: keepSecondParent ? input.parent2Phone : "",
+    childName: input.childName,
+    childIdCard: input.childIdCard,
+    childGender: input.childGender,
+    childHeight: input.childHeight,
+    childWeight: input.childWeight,
+    childSize: input.childSize,
+    child2Name: keepSecondChild ? input.child2Name : "",
+    child2IdCard: keepSecondChild ? input.child2IdCard : "",
+    child2Gender: keepSecondChild ? input.child2Gender : "",
+    child2Height: keepSecondChild ? input.child2Height : "",
+    child2Weight: keepSecondChild ? input.child2Weight : "",
+    child2Size: keepSecondChild ? input.child2Size : "",
     roomNumber: input.roomNumber,
-    parentName: input.parentName,
-    parentPhone: input.parentPhone,
+    roomType: input.roomType,
+    note: input.note,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now
   };
@@ -315,7 +488,41 @@ export async function saveParticipant(input: {
 export async function deleteParticipant(id: string) {
   const db = await readDb();
   db.participants = db.participants.filter((item) => item.id !== id);
+  db.attendanceRecords = db.attendanceRecords.filter((item) => item.participantId !== id);
   await writeDb(db);
+}
+
+export async function listAttendancePoints() {
+  const db = await readDb();
+  return db.attendancePoints.sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+export async function listAttendanceRecords(pointId?: string) {
+  const db = await readDb();
+  return pointId ? db.attendanceRecords.filter((item) => item.pointId === pointId) : db.attendanceRecords;
+}
+
+export async function saveAttendanceRecord(input: AttendanceRecordInput) {
+  const db = await readDb();
+  const now = new Date().toISOString();
+  const existing = db.attendanceRecords.find((item) => item.pointId === input.pointId && item.participantId === input.participantId);
+  const record: AttendanceRecord = {
+    id: existing?.id ?? nanoid(),
+    pointId: input.pointId,
+    participantId: input.participantId,
+    status: input.status,
+    note: input.note,
+    updatedAt: now
+  };
+
+  if (existing) {
+    Object.assign(existing, record);
+  } else {
+    db.attendanceRecords.push(record);
+  }
+
+  await writeDb(db);
+  return record;
 }
 
 export async function listReports(filters: {

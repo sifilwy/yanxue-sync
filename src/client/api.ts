@@ -1,4 +1,7 @@
 import type {
+  AttendancePoint,
+  AttendanceRecord,
+  AttendanceRecordInput,
   BootstrapData,
   CampSession,
   ItineraryPoint,
@@ -143,7 +146,7 @@ export function getStaffMembers() {
   return request<StaffMember[]>("/api/people/staff");
 }
 
-export function saveStaffMember(input: Pick<StaffMember, "name" | "phone"> & { id?: string }) {
+export function saveStaffMember(input: Omit<StaffMember, "id" | "createdAt" | "updatedAt"> & { id?: string }) {
   return request<StaffMember>("/api/people/staff", {
     method: "POST",
     body: JSON.stringify(input)
@@ -158,7 +161,7 @@ export function getParticipants() {
   return request<Participant[]>("/api/people/participants");
 }
 
-export function saveParticipant(input: Pick<Participant, "name" | "phone" | "roomNumber" | "parentName" | "parentPhone"> & { id?: string }) {
+export function saveParticipant(input: Omit<Participant, "id" | "createdAt" | "updatedAt"> & { id?: string }) {
   return request<Participant>("/api/people/participants", {
     method: "POST",
     body: JSON.stringify(input)
@@ -167,4 +170,21 @@ export function saveParticipant(input: Pick<Participant, "name" | "phone" | "roo
 
 export function deleteParticipant(id: string) {
   return request<{ ok: true }>(`/api/people/participants/${id}`, { method: "DELETE" });
+}
+
+export function getAttendancePoints() {
+  return request<AttendancePoint[]>("/api/attendance/points");
+}
+
+export function getAttendanceRecords(pointId?: string) {
+  const params = new URLSearchParams();
+  if (pointId) params.set("pointId", pointId);
+  return request<AttendanceRecord[]>(`/api/attendance/records?${params.toString()}`);
+}
+
+export function saveAttendanceRecord(input: AttendanceRecordInput) {
+  return request<AttendanceRecord>("/api/attendance/records", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
