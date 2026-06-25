@@ -856,8 +856,12 @@ function PeopleViewPanel() {
                 <colgroup>
                   <col className="col-sequence" />
                   <col className="col-type" />
-                  <col className="col-parent" />
-                  <col className="col-child" />
+                  <col className="col-name" />
+                  <col className="col-id-card" />
+                  <col className="col-phone" />
+                  <col className="col-name" />
+                  <col className="col-id-card" />
+                  <col className="col-gender" />
                   <col className="col-metric" />
                   <col className="col-metric" />
                   <col className="col-metric" />
@@ -868,7 +872,7 @@ function PeopleViewPanel() {
                 </colgroup>
                 <thead>
                   <tr>
-                    <th>序号</th><th>类型</th><th>家长信息</th><th>孩子信息</th><th>身高</th><th>体重</th><th>尺码</th><th>房号</th><th>房型</th><th>备注</th><th>操作</th>
+                    <th>序号</th><th>类型</th><th>家长姓名</th><th>家长身份证</th><th>家长手机号</th><th>孩子姓名</th><th>孩子身份证</th><th>性别</th><th>身高</th><th>体重</th><th>尺码</th><th>房号</th><th>房型</th><th>备注</th><th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -877,17 +881,22 @@ function PeopleViewPanel() {
                       <td><span className="sequence-cell">{item.sequence || "-"}</span></td>
                       <td>{isIndependentCamp(item.familyType) ? <span className="tag warn">独</span> : item.familyType}</td>
                       <td>
-                        <div className="multi-line-cell">
-                          <span title={item.parent1IdCard}><b>{item.parent1Name || "-"}</b><small>{item.parent1Phone || "-"}</small></span>
-                          {hasSecondParent(item.familyType) && <span title={item.parent2IdCard}><b>{item.parent2Name || "-"}</b><small>{item.parent2Phone || "-"}</small></span>}
-                          {hasThirdParent(item.familyType) && <span title={item.parent3IdCard}><b>{item.parent3Name || "-"}</b><small>{item.parent3Phone || "-"}</small></span>}
-                        </div>
+                        <div className="multi-line-cell"><b>{item.parent1Name || "-"}</b>{hasSecondParent(item.familyType) && <b>{item.parent2Name || "-"}</b>}{hasThirdParent(item.familyType) && <b>{item.parent3Name || "-"}</b>}</div>
                       </td>
                       <td>
-                        <div className="multi-line-cell">
-                          <span title={item.childIdCard}><b>{item.childName || "-"}</b><small>{item.childGender || "-"}</small></span>
-                          {hasSecondChild(item.familyType) && <span title={item.child2IdCard}><b>{item.child2Name || "-"}</b><small>{item.child2Gender || "-"}</small></span>}
-                        </div>
+                        <div className="multi-line-cell id-cell"><span>{item.parent1IdCard || "-"}</span>{hasSecondParent(item.familyType) && <span>{item.parent2IdCard || "-"}</span>}{hasThirdParent(item.familyType) && <span>{item.parent3IdCard || "-"}</span>}</div>
+                      </td>
+                      <td>
+                        <div className="multi-line-cell phone-cell"><span>{item.parent1Phone || "-"}</span>{hasSecondParent(item.familyType) && <span>{item.parent2Phone || "-"}</span>}{hasThirdParent(item.familyType) && <span>{item.parent3Phone || "-"}</span>}</div>
+                      </td>
+                      <td>
+                        <div className="multi-line-cell"><b>{item.childName || "-"}</b>{hasSecondChild(item.familyType) && <b>{item.child2Name || "-"}</b>}</div>
+                      </td>
+                      <td>
+                        <div className="multi-line-cell id-cell"><span>{item.childIdCard || "-"}</span>{hasSecondChild(item.familyType) && <span>{item.child2IdCard || "-"}</span>}</div>
+                      </td>
+                      <td>
+                        <div className="multi-line-cell metric-cell"><b>{item.childGender || "-"}</b>{hasSecondChild(item.familyType) && <b>{item.child2Gender || "-"}</b>}</div>
                       </td>
                       <td><div className="multi-line-cell metric-cell"><b>{item.childHeight || "-"}</b>{hasSecondChild(item.familyType) && <b>{item.child2Height || "-"}</b>}</div></td>
                       <td><div className="multi-line-cell metric-cell"><b>{item.childWeight || "-"}</b>{hasSecondChild(item.familyType) && <b>{item.child2Weight || "-"}</b>}</div></td>

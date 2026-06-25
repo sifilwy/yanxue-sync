@@ -925,7 +925,7 @@ input[type="file"]::file-selector-button {
 }
 
 .participant-roster-table {
-  width: 1500px;
+  width: 2120px;
   border-collapse: separate;
   border-spacing: 0 10px;
   table-layout: fixed;
@@ -968,15 +968,23 @@ input[type="file"]::file-selector-button {
 }
 
 .participant-roster-table .col-type {
-  width: 92px;
+  width: 86px;
 }
 
-.participant-roster-table .col-parent {
-  width: 210px;
+.participant-roster-table .col-name {
+  width: 164px;
 }
 
-.participant-roster-table .col-child {
-  width: 190px;
+.participant-roster-table .col-id-card {
+  width: 226px;
+}
+
+.participant-roster-table .col-phone {
+  width: 146px;
+}
+
+.participant-roster-table .col-gender {
+  width: 70px;
 }
 
 .participant-roster-table .col-metric {
@@ -998,7 +1006,7 @@ input[type="file"]::file-selector-button {
 .multi-line-cell {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
+  gap: 5px;
   padding: 0;
   min-height: 42px;
   align-content: center;
@@ -1006,18 +1014,24 @@ input[type="file"]::file-selector-button {
 }
 
 .multi-line-cell > span {
-  display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  align-items: baseline;
-  gap: 7px;
+  display: block;
   min-width: 0;
 }
 
 .multi-line-cell b,
 .multi-line-cell small {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.id-cell span,
+.phone-cell span {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 22px;
   white-space: nowrap;
 }
 
@@ -2405,4 +2419,24 @@ textarea:focus {
   .sub-tabs {
     overflow-x: auto;
   }
+}
+
+.participant-roster-table .multi-line-cell,
+.participant-roster-table .multi-line-cell b,
+.participant-roster-table .multi-line-cell small,
+.participant-roster-table .multi-line-cell span {
+  min-width: 0;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.participant-roster-table .id-cell span,
+.participant-roster-table .phone-cell span {
+  display: block;
+  letter-spacing: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
