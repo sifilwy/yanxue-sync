@@ -7,6 +7,8 @@ import { Loading, Shell } from "../components/Layout";
 import { profileStorageKey } from "../constants";
 import { useBootstrap } from "../hooks/useBootstrap";
 import { filesToDataUrls, type PreparedImage } from "../utils/images";
+import { attendanceDayCount, attendanceStatusLabels, normalizeAttendancePoints } from "../../shared/attendance";
+import { childNames, includesKeyword, parentNames, parentPhones } from "../utils/people";
 
 type SavedProfile = {
   name?: string;
@@ -374,7 +376,7 @@ export function MobilePage() {
       {profileReady && !editingProfile && activeView === "attendance" && (
         <section className="mobile-attendance">
           <div className="mobile-day-tabs-top" aria-label="点名天数">
-            {Array.from({ length: 7 }).map((_, index) => (
+            {Array.from({ length: attendanceDayCount }).map((_, index) => (
               <button className={attendanceDay === index + 1 ? "active" : ""} key={index + 1} type="button" onClick={() => setAttendanceDay(index + 1)}>
                 第{index + 1}天
               </button>
@@ -455,54 +457,4 @@ export function MobilePage() {
       )}
     </Shell>
   );
-}
-
-const attendanceStatusLabels: Record<AttendanceStatus, string> = {
-  pending: "未点",
-  present: "已到",
-  absent: "未到"
-};
-
-function normalizeAttendancePoints(points: AttendancePoint[]): AttendancePoint[] {
-  const normalized = points.map((point, index) => {
-    const sortOrder = point.sortOrder || index + 1;
-    const dayIndex = point.dayIndex || Math.floor((sortOrder - 1) / 8) + 1;
-    const processIndex = point.processIndex || ((sortOrder - 1) % 8) + 1;
-    return { ...point, dayIndex, processIndex, sortOrder };
-  });
-
-  if (normalized.length >= 56 && normalized.every((point) => point.dayIndex && point.processIndex)) {
-    return normalized;
-  }
-
-  const baseProcesses = normalized.slice(0, 8);
-  if (!baseProcesses.length) return [];
-
-  return Array.from({ length: 7 }).flatMap((_, dayIndex) => (
-    baseProcesses.map((point, processIndex) => ({
-      ...point,
-      id: `attendance-d${dayIndex + 1}-p${processIndex + 1}`,
-      dayIndex: dayIndex + 1,
-      processIndex: processIndex + 1,
-      sortOrder: dayIndex * 8 + processIndex + 1
-    }))
-  ));
-}
-
-function includesKeyword(values: string[], keyword: string) {
-  const text = keyword.trim().toLowerCase();
-  if (!text) return true;
-  return values.some((value) => value.toLowerCase().includes(text));
-}
-
-function parentNames(item: Participant) {
-  return [item.parent1Name, item.parent2Name].filter(Boolean).join(" / ") || "-";
-}
-
-function parentPhones(item: Participant) {
-  return [item.parent1Phone, item.parent2Phone].filter(Boolean).join(" / ") || "-";
-}
-
-function childNames(item: Participant) {
-  return [item.childName, item.child2Name].filter(Boolean).join(" / ") || "-";
 }

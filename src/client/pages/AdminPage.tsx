@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarCheck2, CheckCircle2, ClipboardList, Download, Plus, Save, Trash2, UsersRound } from "lucide-react";
+import { attendanceDayCount, attendanceStatusLabels } from "../../shared/attendance";
 import type {
   AttendanceFamilySummary,
   AttendancePoint,
@@ -42,6 +43,18 @@ import { RecordImages } from "../components/RecordImages";
 import { Loading, Shell } from "../components/Layout";
 import { statusLabels } from "../constants";
 import { useBootstrap } from "../hooks/useBootstrap";
+import {
+  childNames,
+  familyTypes,
+  genders,
+  hasSecondChild,
+  hasSecondParent,
+  includesKeyword,
+  parentNames,
+  parentPhones,
+  peopleGroups,
+  roomTypes
+} from "../utils/people";
 
 type AdminView = "reports" | "people" | "attendance";
 type PeopleView = "staff" | "participants";
@@ -54,10 +67,6 @@ type ParticipantDraft = Omit<Participant, "id" | "createdAt" | "updatedAt"> & { 
 const emptySession = (): SessionDraft => ({ name: "", city: "", startsOn: "", endsOn: "" });
 const emptyTeam = (sessionId = ""): TeamDraft => ({ sessionId, name: "" });
 const emptyPoint = (sessionId = "", teamId = ""): PointDraft => ({ sessionId, teamId, name: "", sortOrder: 0 });
-const peopleGroups = ["一团", "二团", "三团", "四团"];
-const familyTypes = ["1大1小", "1大2小", "2大1小", "2大2小"];
-const roomTypes = ["大床", "标间", "亲子房", "其他"];
-const genders = ["男", "女"];
 
 const emptyStaff = (groupName = "一团"): StaffDraft => ({
   groupName,
@@ -94,14 +103,6 @@ const emptyParticipant = (groupName = "一团"): ParticipantDraft => ({
   roomType: "",
   note: ""
 });
-
-function hasSecondParent(familyType: string) {
-  return familyType.startsWith("2大");
-}
-
-function hasSecondChild(familyType: string) {
-  return familyType.endsWith("2小");
-}
 
 function familyTypePatch(draft: ParticipantDraft, familyType: string): ParticipantDraft {
   return {
@@ -833,12 +834,6 @@ function PeopleViewPanel() {
   );
 }
 
-function includesKeyword(values: string[], keyword: string) {
-  const text = keyword.trim().toLowerCase();
-  if (!text) return true;
-  return values.some((value) => value.toLowerCase().includes(text));
-}
-
 function AttendanceViewPanel() {
   const [points, setPoints] = useState<AttendancePoint[]>([]);
   const [activeDay, setActiveDay] = useState(1);
@@ -896,7 +891,7 @@ function AttendanceViewPanel() {
 
   const recordMap = new Map(records.map((item) => [item.participantId, item]));
   const dayPoints = useMemo(() => points.filter((point) => point.dayIndex === activeDay), [points, activeDay]);
-  const groupedPoints = useMemo(() => Array.from({ length: 7 }).map((_, index) => (
+  const groupedPoints = useMemo(() => Array.from({ length: attendanceDayCount }).map((_, index) => (
     points.filter((point) => point.dayIndex === index + 1).sort((a, b) => a.processIndex - b.processIndex)
   )), [points]);
   const presentCount = filteredParticipants.filter((item) => recordMap.get(item.id)?.status === "present").length;
@@ -960,7 +955,7 @@ function AttendanceViewPanel() {
             <span>7 天 × 8 流程</span>
           </div>
           <div className="attendance-day-list">
-            {Array.from({ length: 7 }).map((_, index) => (
+            {Array.from({ length: attendanceDayCount }).map((_, index) => (
               <button className={activeDay === index + 1 ? "active" : ""} key={index + 1} type="button" onClick={() => setActiveDay(index + 1)}>
                 第{index + 1}天
               </button>
@@ -1093,22 +1088,4 @@ function AttendanceViewPanel() {
       </section>
     </>
   );
-}
-
-const attendanceStatusLabels: Record<AttendanceStatus, string> = {
-  pending: "未点",
-  present: "已到",
-  absent: "未到"
-};
-
-function parentNames(item: Participant) {
-  return [item.parent1Name, item.parent2Name].filter(Boolean).join(" / ") || "-";
-}
-
-function parentPhones(item: Participant) {
-  return [item.parent1Phone, item.parent2Phone].filter(Boolean).join(" / ") || "-";
-}
-
-function childNames(item: Participant) {
-  return [item.childName, item.child2Name].filter(Boolean).join(" / ") || "-";
 }

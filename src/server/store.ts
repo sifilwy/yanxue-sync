@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nanoid } from "nanoid";
+import { attendanceProcessCount, buildDefaultAttendancePoints, defaultAttendanceProcessNames } from "../shared/attendance";
 import type {
   AttendanceFamilySummary,
   AttendancePoint,
@@ -45,17 +46,6 @@ const defaultRoles: RoleOption[] = [
 ];
 
 const defaultCategories = ["人员", "餐饮", "景点", "交通", "酒店", "家长反馈", "学生情况", "老师情况", "其他"];
-const defaultAttendanceProcessNames = [
-  "集合出发",
-  "上车点名",
-  "抵达场馆",
-  "上午活动",
-  "午餐集合",
-  "下午活动",
-  "返程上车",
-  "回到酒店"
-];
-
 function seedDb(): DbShape {
   const sessionId = nanoid();
   const teamA = nanoid();
@@ -94,15 +84,7 @@ function seedDb(): DbShape {
 }
 
 function seedAttendancePoints() {
-  return Array.from({ length: 7 }).flatMap((_, dayIndex) => (
-    defaultAttendanceProcessNames.map((name, processIndex) => ({
-      id: `attendance-d${dayIndex + 1}-p${processIndex + 1}`,
-      name,
-      dayIndex: dayIndex + 1,
-      processIndex: processIndex + 1,
-      sortOrder: dayIndex * defaultAttendanceProcessNames.length + processIndex + 1
-    }))
-  ));
+  return buildDefaultAttendancePoints();
 }
 
 function normalizeDb(db: Partial<DbShape>): DbShape {
@@ -124,8 +106,8 @@ function normalizeDb(db: Partial<DbShape>): DbShape {
 function normalizeAttendancePoint(item: Partial<AttendancePoint>, index = 0): AttendancePoint {
   const sortOrder = item.sortOrder ?? index + 1;
   const zeroIndex = sortOrder - 1;
-  const dayIndex = item.dayIndex ?? Math.floor(zeroIndex / defaultAttendanceProcessNames.length) + 1;
-  const processIndex = item.processIndex ?? (zeroIndex % defaultAttendanceProcessNames.length) + 1;
+  const dayIndex = item.dayIndex ?? Math.floor(zeroIndex / attendanceProcessCount) + 1;
+  const processIndex = item.processIndex ?? (zeroIndex % attendanceProcessCount) + 1;
   return {
     id: item.id ?? `attendance-d${dayIndex}-p${processIndex}`,
     name: item.name ?? defaultAttendanceProcessNames[processIndex - 1] ?? `流程${processIndex}`,
@@ -508,16 +490,19 @@ export async function listAttendanceFamilySummaries(groupName?: string): Promise
   const participants = db.participants
     .filter((item) => !groupName || item.groupName === groupName)
     .sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
-  const pointIds = new Set(db.attendancePoints.map((point) => point.id));
+  const pointOrderMap = new Map(db.attendancePoints.map((point) => [point.id, point.sortOrder]));
+  const recordsByParticipant = new Map<string, AttendanceRecord[]>();
+
+  for (const record of db.attendanceRecords) {
+    if (!pointOrderMap.has(record.pointId)) continue;
+    const records = recordsByParticipant.get(record.participantId) ?? [];
+    records.push(record);
+    recordsByParticipant.set(record.participantId, records);
+  }
 
   return participants.map((participant) => {
-    const records = db.attendanceRecords
-      .filter((record) => record.participantId === participant.id && pointIds.has(record.pointId))
-      .sort((a, b) => {
-        const pointA = db.attendancePoints.find((point) => point.id === a.pointId)?.sortOrder ?? 0;
-        const pointB = db.attendancePoints.find((point) => point.id === b.pointId)?.sortOrder ?? 0;
-        return pointA - pointB;
-      });
+    const records = (recordsByParticipant.get(participant.id) ?? [])
+      .sort((a, b) => (pointOrderMap.get(a.pointId) ?? 0) - (pointOrderMap.get(b.pointId) ?? 0));
     const presentCount = records.filter((record) => record.status === "present").length;
     const absentCount = records.filter((record) => record.status === "absent").length;
     const pendingCount = db.attendancePoints.length - presentCount - absentCount;
