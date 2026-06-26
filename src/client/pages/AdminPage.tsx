@@ -54,6 +54,7 @@ import {
   inferFamilyType,
   includesKeyword,
   isIndependentCamp,
+  listAttendanceMembers,
   parentNames,
   parentPhones,
   peopleGroups,
@@ -998,6 +999,8 @@ function AttendanceViewPanel() {
   const absentCount = filteredParticipants.filter((item) => recordMap.get(item.id)?.status === "absent").length;
   const pendingCount = filteredParticipants.length - presentCount - absentCount;
   const absentParticipants = filteredParticipants.filter((item) => recordMap.get(item.id)?.status === "absent");
+  const expectedMemberCount = filteredParticipants.reduce((sum, item) => sum + listAttendanceMembers(item).length, 0);
+  const absentMemberCount = absentParticipants.reduce((sum, item) => sum + (recordMap.get(item.id)?.absentMemberIds?.length ?? 0), 0);
   const filteredSummaries = summaries.filter((summary) => includesKeyword([
     summary.participant.sequence,
     parentNames(summary.participant),
@@ -1006,6 +1009,7 @@ function AttendanceViewPanel() {
     summary.participant.note,
     ...summary.records.map((record) => record.note)
   ], keyword)).sort((a, b) => compareSequence(a.participant, b.participant));
+  const abnormalSummaries = filteredSummaries.filter((summary) => summary.absentCount > 0);
 
   useEffect(() => {
     if (!dayPoints.length) return;
@@ -1031,6 +1035,21 @@ function AttendanceViewPanel() {
     });
     setSummaries(await getAttendanceFamilySummaries(activeGroup));
     setMessage("已保存");
+  }
+
+  function attendancePointLabel(pointId: string) {
+    const point = points.find((item) => item.id === pointId);
+    return point ? `第${point.dayIndex}天 · ${point.name}` : "未知行程";
+  }
+
+  function getFamilyAbsentDetails(summary: AttendanceFamilySummary) {
+    return summary.records
+      .filter((record) => record.status === "absent")
+      .map((record) => ({
+        record,
+        pointLabel: attendancePointLabel(record.pointId),
+        members: formatAbsentMembers(summary.participant, record.absentMemberIds ?? [])
+      }));
   }
 
   return (
@@ -1077,28 +1096,68 @@ function AttendanceViewPanel() {
         <section className="panel attendance-panel">
           <div className="section-head">
             <h2>{activeMode === "point" ? `第${activeDay}天 · ${points.find((item) => item.id === activePointId)?.name ?? "点名"}` : `${activeGroup} · 家庭全程点名`}</h2>
-            <span>{activeMode === "point" ? (message || `已到 ${presentCount} / 未到 ${absentCount} / 未点 ${pendingCount}`) : `${filteredSummaries.length} 户 · 异常 ${filteredSummaries.filter((item) => item.absentCount > 0).length} 户`}</span>
+            <span>{activeMode === "point" ? (message || `应到 ${expectedMemberCount} 人 / 未到 ${absentMemberCount} 人 / 异常 ${absentCount} 户 / 未点 ${pendingCount} 户`) : `${filteredSummaries.length} 户 · 异常 ${filteredSummaries.filter((item) => item.absentCount > 0).length} 户`}</span>
           </div>
           <input className="people-search" placeholder="搜索序号、家长、电话或孩子姓名" value={keyword} onChange={(event) => setKeyword(event.target.value)} />
 
           {activeMode === "point" ? (
             <>
-              <div className="absent-summary">
-                <b>未到名单</b>
-                {absentParticipants.length === 0 ? <span>暂无未到</span> : (
-                  <div className="absent-chip-list">
+              <div className="attendance-dashboard">
+                <div className="attendance-metric">
+                  <span>应到人员</span>
+                  <strong>{expectedMemberCount}</strong>
+                  <small>{filteredParticipants.length} 户家庭</small>
+                </div>
+                <div className="attendance-metric danger">
+                  <span>未到人员</span>
+                  <strong>{absentMemberCount}</strong>
+                  <small>{absentCount} 户异常</small>
+                </div>
+                <div className="attendance-metric">
+                  <span>未点家庭</span>
+                  <strong>{pendingCount}</strong>
+                  <small>{presentCount} 户已到</small>
+                </div>
+              </div>
+
+              <div className="absence-board">
+                <div className="absence-board-head">
+                  <div>
+                    <b>当前行程异常</b>
+                    <span>{absentParticipants.length ? `${absentParticipants.length} 户需要确认` : "暂无未到"}</span>
+                  </div>
+                </div>
+                {absentParticipants.length === 0 ? (
+                  <div className="empty-state">当前行程没有未到人员。</div>
+                ) : (
+                  <div className="absence-card-grid">
                     {absentParticipants.map((item) => {
-                      const detail = formatAbsentMembers(item, recordMap.get(item.id)?.absentMemberIds ?? []);
+                      const record = recordMap.get(item.id);
+                      const detail = formatAbsentMembers(item, record?.absentMemberIds ?? []);
                       return (
-                        <span key={item.id}>
-                          {item.sequence}号 {childNames(item)}
-                          {detail && <em>{detail}</em>}
-                        </span>
+                        <article className="absence-card" key={item.id}>
+                          <div className="absence-card-top">
+                            <span className="sequence-cell">{item.sequence || "-"}</span>
+                            <div>
+                              <b>{childNames(item)}</b>
+                              <small>{item.familyType}</small>
+                            </div>
+                          </div>
+                          <div className="absence-members">
+                            {(detail || "未指定具体成员").split("、").map((member) => <span key={member}>{member}</span>)}
+                          </div>
+                          <dl>
+                            <div><dt>家长</dt><dd>{parentNames(item)}</dd></div>
+                            <div><dt>电话</dt><dd>{parentPhones(item)}</dd></div>
+                            <div><dt>备注</dt><dd>{record?.note || "-"}</dd></div>
+                          </dl>
+                        </article>
                       );
                     })}
                   </div>
                 )}
               </div>
+
               <div className="attendance-table-wrap">
                 <table className="attendance-table">
                   <colgroup>
@@ -1153,10 +1212,48 @@ function AttendanceViewPanel() {
               </div>
             </>
           ) : (
+            <>
+            <div className="family-overview-board">
+              <div className="absence-board-head">
+                <div>
+                  <b>全程异常家庭</b>
+                  <span>{abnormalSummaries.length ? `${abnormalSummaries.length} 户出现未到记录` : "暂无异常家庭"}</span>
+                </div>
+              </div>
+              {abnormalSummaries.length === 0 ? (
+                <div className="empty-state">当前团还没有未到记录。</div>
+              ) : (
+                <div className="family-exception-grid">
+                  {abnormalSummaries.map((summary) => {
+                    const absentDetails = getFamilyAbsentDetails(summary);
+                    return (
+                      <article className="family-exception-card" key={summary.participant.id}>
+                        <div className="absence-card-top">
+                          <span className="sequence-cell">{summary.participant.sequence || "-"}</span>
+                          <div>
+                            <b>{childNames(summary.participant)}</b>
+                            <small>{summary.participant.familyType} · 未到 {summary.absentCount} 次</small>
+                          </div>
+                        </div>
+                        <div className="family-exception-events">
+                          {absentDetails.slice(0, 4).map((detail) => (
+                            <span key={detail.record.id}>
+                              <b>{detail.pointLabel}</b>
+                              {detail.members || "未指定具体成员"}
+                            </span>
+                          ))}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <div className="family-summary-list">
               {filteredSummaries.length === 0 && <p className="muted">当前团还没有家庭名单，请先在人员信息中录入。</p>}
               {filteredSummaries.map((summary) => {
                 const isExpanded = expandedFamilyId === summary.participant.id;
+                const absentDetails = getFamilyAbsentDetails(summary);
                 return (
                   <article className="family-summary-card" key={summary.participant.id}>
                     <button className="family-summary-head" type="button" onClick={() => setExpandedFamilyId(isExpanded ? "" : summary.participant.id)}>
@@ -1165,6 +1262,17 @@ function AttendanceViewPanel() {
                       <small>{parentNames(summary.participant)} · {parentPhones(summary.participant)}</small>
                       <b className={summary.absentCount > 0 ? "danger" : ""}>已到 {summary.presentCount} / 未到 {summary.absentCount} / 未点 {summary.pendingCount}</b>
                     </button>
+                    {absentDetails.length > 0 && (
+                      <div className="family-alert-strip">
+                        {absentDetails.slice(0, 3).map((detail) => (
+                          <span key={detail.record.id}>
+                            <b>{detail.pointLabel}</b>
+                            {detail.members || "未指定具体成员"}
+                          </span>
+                        ))}
+                        {absentDetails.length > 3 && <em>另有 {absentDetails.length - 3} 条异常</em>}
+                      </div>
+                    )}
                     <div className="family-attendance-grid">
                       {groupedPoints.map((dayPointList, index) => (
                         <div className="family-attendance-day" key={index + 1}>
@@ -1207,6 +1315,7 @@ function AttendanceViewPanel() {
                 );
               })}
             </div>
+            </>
           )}
         </section>
       </section>
