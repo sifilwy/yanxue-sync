@@ -1,5 +1,17 @@
 import type { Participant } from "../../shared/types";
-export { familyTypes, genders, hasSecondChild, hasSecondParent, hasThirdParent, inferFamilyType, isIndependentCamp, peopleGroups, roomTypes } from "../../shared/people";
+export {
+  familyTypes,
+  formatAbsentMembers,
+  genders,
+  hasSecondChild,
+  hasSecondParent,
+  hasThirdParent,
+  inferFamilyType,
+  isIndependentCamp,
+  listAttendanceMembers,
+  peopleGroups,
+  roomTypes
+} from "../../shared/people";
 
 export function includesKeyword(values: string[], keyword: string) {
   const text = keyword.trim().toLowerCase();

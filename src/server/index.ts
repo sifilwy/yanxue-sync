@@ -147,6 +147,7 @@ const attendanceRecordSchema = z.object({
   pointId: z.string().min(1),
   participantId: z.string().min(1),
   status: attendanceStatusSchema,
+  absentMemberIds: z.array(z.string()).default([]),
   note: z.string().default("")
 });
 

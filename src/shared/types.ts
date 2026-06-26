@@ -108,6 +108,7 @@ export type AttendanceRecord = {
   pointId: string;
   participantId: string;
   status: AttendanceStatus;
+  absentMemberIds: string[];
   note: string;
   updatedAt: string;
 };
@@ -116,6 +117,7 @@ export type AttendanceRecordInput = {
   pointId: string;
   participantId: string;
   status: AttendanceStatus;
+  absentMemberIds?: string[];
   note: string;
 };
 

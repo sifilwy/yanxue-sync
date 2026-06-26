@@ -124,6 +124,7 @@ function normalizeAttendanceRecord(item: Partial<AttendanceRecord>): AttendanceR
     pointId: item.pointId ?? "",
     participantId: item.participantId ?? "",
     status: item.status ?? "pending",
+    absentMemberIds: item.absentMemberIds ?? [],
     note: item.note ?? "",
     updatedAt: item.updatedAt ?? new Date().toISOString()
   };
@@ -563,6 +564,7 @@ export async function saveAttendanceRecord(input: AttendanceRecordInput) {
     pointId: input.pointId,
     participantId: input.participantId,
     status: input.status,
+    absentMemberIds: input.status === "absent" ? input.absentMemberIds ?? [] : [],
     note: input.note,
     updatedAt: now
   };

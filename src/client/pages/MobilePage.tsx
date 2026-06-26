@@ -8,7 +8,7 @@ import { profileStorageKey } from "../constants";
 import { useBootstrap } from "../hooks/useBootstrap";
 import { filesToDataUrls, type PreparedImage } from "../utils/images";
 import { attendanceDayCount, attendanceStatusLabels, normalizeAttendancePoints } from "../../shared/attendance";
-import { childNames, includesKeyword, parentNames, parentPhones } from "../utils/people";
+import { childNames, includesKeyword, listAttendanceMembers, parentNames, parentPhones } from "../utils/people";
 
 type SavedProfile = {
   name?: string;
@@ -18,6 +18,7 @@ type SavedProfile = {
 };
 
 type MobileView = "report" | "attendance";
+type AttendanceDraft = Pick<AttendanceRecord, "status" | "note" | "absentMemberIds">;
 
 export function MobilePage() {
   const { data, error } = useBootstrap();
@@ -42,7 +43,7 @@ export function MobilePage() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [attendanceGroup, setAttendanceGroup] = useState("");
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
-  const [attendanceDrafts, setAttendanceDrafts] = useState<Record<string, Pick<AttendanceRecord, "status" | "note">>>({});
+  const [attendanceDrafts, setAttendanceDrafts] = useState<Record<string, AttendanceDraft>>({});
   const [attendanceKeyword, setAttendanceKeyword] = useState("");
   const [attendanceMessage, setAttendanceMessage] = useState("");
 
@@ -76,7 +77,14 @@ export function MobilePage() {
   const attendanceSummary = useMemo(() => {
     const present = attendancePeople.filter((item) => (attendanceDrafts[item.id]?.status ?? attendanceRecordMap.get(item.id)?.status) === "present").length;
     const absent = attendancePeople.filter((item) => (attendanceDrafts[item.id]?.status ?? attendanceRecordMap.get(item.id)?.status) === "absent").length;
-    return { present, absent, pending: attendancePeople.length - present - absent };
+    const absentMembers = attendancePeople.reduce((count, item) => {
+      const draft = attendanceDrafts[item.id];
+      const record = attendanceRecordMap.get(item.id);
+      const status = draft?.status ?? record?.status ?? "pending";
+      const memberIds = draft?.absentMemberIds ?? record?.absentMemberIds ?? [];
+      return count + (status === "absent" ? memberIds.length : 0);
+    }, 0);
+    return { present, absent, absentMembers, pending: attendancePeople.length - present - absent };
   }, [attendancePeople, attendanceDrafts, attendanceRecordMap]);
 
   useEffect(() => {
@@ -152,7 +160,7 @@ export function MobilePage() {
     if (!attendancePointId) return;
     getAttendanceRecords(attendancePointId).then((items) => {
       setAttendanceRecords(items);
-      setAttendanceDrafts(Object.fromEntries(items.map((item) => [item.participantId, { status: item.status, note: item.note }])));
+      setAttendanceDrafts(Object.fromEntries(items.map((item) => [item.participantId, { status: item.status, note: item.note, absentMemberIds: item.absentMemberIds ?? [] }])));
       setAttendanceMessage("");
     });
   }, [attendancePointId]);
@@ -215,16 +223,41 @@ export function MobilePage() {
     setImageUrls((items) => [...items, ...nextImages].slice(0, 3));
   }
 
-  function updateAttendanceDraft(participant: Participant, patch: Partial<Pick<AttendanceRecord, "status" | "note">>) {
+  function getNextAbsentMemberIds(participant: Participant, status: AttendanceStatus, currentIds: string[]) {
+    if (status !== "absent") return [];
+    const members = listAttendanceMembers(participant);
+    if (currentIds.length === 0 && members.length === 1) return [members[0].id];
+    return currentIds;
+  }
+
+  function updateAttendanceDraft(participant: Participant, patch: Partial<AttendanceDraft>) {
     const current = attendanceRecordMap.get(participant.id);
     setAttendanceDrafts((items) => ({
       ...items,
       [participant.id]: {
         status: patch.status ?? items[participant.id]?.status ?? current?.status ?? "pending",
-        note: patch.note ?? items[participant.id]?.note ?? current?.note ?? ""
+        note: patch.note ?? items[participant.id]?.note ?? current?.note ?? "",
+        absentMemberIds: patch.absentMemberIds ?? getNextAbsentMemberIds(
+          participant,
+          patch.status ?? items[participant.id]?.status ?? current?.status ?? "pending",
+          items[participant.id]?.absentMemberIds ?? current?.absentMemberIds ?? []
+        )
       }
     }));
     setAttendanceMessage("未提交");
+  }
+
+  function toggleAbsentMember(participant: Participant, memberId: string) {
+    const current = attendanceRecordMap.get(participant.id);
+    const draft = attendanceDrafts[participant.id];
+    const currentIds = draft?.absentMemberIds ?? current?.absentMemberIds ?? [];
+    const nextIds = currentIds.includes(memberId)
+      ? currentIds.filter((item) => item !== memberId)
+      : [...currentIds, memberId];
+    updateAttendanceDraft(participant, {
+      status: "absent",
+      absentMemberIds: nextIds
+    });
   }
 
   async function submitAttendance() {
@@ -236,11 +269,12 @@ export function MobilePage() {
         pointId: attendancePointId,
         participantId: participant.id,
         status: draft?.status ?? current?.status ?? "pending",
+        absentMemberIds: draft?.absentMemberIds ?? current?.absentMemberIds ?? [],
         note: draft?.note ?? current?.note ?? ""
       });
     }));
     setAttendanceRecords(saved);
-    setAttendanceDrafts(Object.fromEntries(saved.map((item) => [item.participantId, { status: item.status, note: item.note }])));
+    setAttendanceDrafts(Object.fromEntries(saved.map((item) => [item.participantId, { status: item.status, note: item.note, absentMemberIds: item.absentMemberIds ?? [] }])));
     setAttendanceMessage("已提交");
   }
 
@@ -402,7 +436,7 @@ export function MobilePage() {
               <div className="panel mobile-attendance-head">
                 <div>
                   <h2>第{attendanceDay}天 · {attendancePoints.find((point) => point.id === attendancePointId)?.name ?? "点名"}</h2>
-                  <span>{attendanceMessage || `已到 ${attendanceSummary.present} / 未到 ${attendanceSummary.absent} / 未点 ${attendanceSummary.pending}`}</span>
+                  <span>{attendanceMessage || `已到 ${attendanceSummary.present} / 未到 ${attendanceSummary.absent}户${attendanceSummary.absentMembers ? ` · ${attendanceSummary.absentMembers}人` : ""} / 未点 ${attendanceSummary.pending}`}</span>
                 </div>
                 {attendanceDayPoints.length === 0 && <p className="muted">当前天数还没有行程点。</p>}
                 {availableGroups.length > 0 && (
@@ -423,6 +457,8 @@ export function MobilePage() {
                   const draft = attendanceDrafts[participant.id];
                   const status = draft?.status ?? record?.status ?? "pending";
                   const note = draft?.note ?? record?.note ?? "";
+                  const members = listAttendanceMembers(participant);
+                  const absentMemberIds = draft?.absentMemberIds ?? record?.absentMemberIds ?? [];
                   return (
                     <article className="mobile-attendance-card" key={participant.id}>
                       <div className="mobile-attendance-main">
@@ -439,6 +475,24 @@ export function MobilePage() {
                           </button>
                         ))}
                       </div>
+                      {status === "absent" && (
+                        <div className="attendance-member-picker" aria-label="选择未到人员">
+                          <span>未到人员</span>
+                          <div>
+                            {members.map((member) => (
+                              <button
+                                className={absentMemberIds.includes(member.id) ? "active" : ""}
+                                key={member.id}
+                                type="button"
+                                onClick={() => toggleAbsentMember(participant, member.id)}
+                              >
+                                <small>{member.label}</small>
+                                <b>{member.name}</b>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <textarea
                         className="attendance-note"
                         value={note}

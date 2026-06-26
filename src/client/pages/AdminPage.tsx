@@ -46,6 +46,7 @@ import { useBootstrap } from "../hooks/useBootstrap";
 import {
   childNames,
   familyTypes,
+  formatAbsentMembers,
   genders,
   hasSecondChild,
   hasSecondParent,
@@ -1013,13 +1014,14 @@ function AttendanceViewPanel() {
     }
   }, [dayPoints, activePointId]);
 
-  async function updateAttendance(participant: Participant, patch: Partial<Pick<AttendanceRecord, "status" | "note">>) {
+  async function updateAttendance(participant: Participant, patch: Partial<Pick<AttendanceRecord, "status" | "note" | "absentMemberIds">>) {
     if (!activePointId) return;
     const current = recordMap.get(participant.id);
     const next = await saveAttendanceRecord({
       pointId: activePointId,
       participantId: participant.id,
       status: patch.status ?? current?.status ?? "pending",
+      absentMemberIds: patch.absentMemberIds ?? current?.absentMemberIds ?? [],
       note: patch.note ?? current?.note ?? ""
     });
     setRecords((items) => {
@@ -1084,7 +1086,17 @@ function AttendanceViewPanel() {
               <div className="absent-summary">
                 <b>未到名单</b>
                 {absentParticipants.length === 0 ? <span>暂无未到</span> : (
-                  <p>{absentParticipants.map((item) => `${item.sequence}号 ${childNames(item)}（${parentNames(item)}）`).join("、")}</p>
+                  <div className="absent-chip-list">
+                    {absentParticipants.map((item) => {
+                      const detail = formatAbsentMembers(item, recordMap.get(item.id)?.absentMemberIds ?? []);
+                      return (
+                        <span key={item.id}>
+                          {item.sequence}号 {childNames(item)}
+                          {detail && <em>{detail}</em>}
+                        </span>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
               <div className="attendance-table-wrap">
@@ -1104,6 +1116,7 @@ function AttendanceViewPanel() {
                     {filteredParticipants.map((participant) => {
                       const record = recordMap.get(participant.id);
                       const status = record?.status ?? "pending";
+                      const absentMemberText = status === "absent" ? formatAbsentMembers(participant, record?.absentMemberIds ?? []) : "";
                       return (
                         <tr key={participant.id}>
                           <td><span className="sequence-cell">{participant.sequence || "-"}</span></td>
@@ -1118,6 +1131,11 @@ function AttendanceViewPanel() {
                                 </button>
                               ))}
                             </div>
+                            {absentMemberText && (
+                              <div className="attendance-member-readout">
+                                {absentMemberText}
+                              </div>
+                            )}
                           </td>
                           <td>
                             <textarea
@@ -1174,7 +1192,12 @@ function AttendanceViewPanel() {
                             <div className="family-detail-row" key={point.id}>
                               <span>第{point.dayIndex}天 · {point.name}</span>
                               <b className={status}>{attendanceStatusLabels[status]}</b>
-                              <p>{record?.note || "-"}</p>
+                              <p>
+                                {status === "absent" && record?.absentMemberIds?.length ? (
+                                  <strong>{formatAbsentMembers(summary.participant, record.absentMemberIds)}</strong>
+                                ) : null}
+                                {record?.note || "-"}
+                              </p>
                             </div>
                           );
                         })}
