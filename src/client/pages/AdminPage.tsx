@@ -1,28 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarCheck2, CheckCircle2, ClipboardList, Download, Plus, Save, Trash2, UsersRound } from "lucide-react";
+import { CalendarCheck2, CheckCircle2, ClipboardList, Download, Plus, Trash2, UsersRound } from "lucide-react";
 import { attendanceDayCount, attendanceStatusLabels } from "../../shared/attendance";
+import { isValidIdCard, isValidPhone, normalizeIdCard, normalizePhone } from "../../shared/validation";
 import type {
   AttendanceFamilySummary,
   AttendancePoint,
   AttendanceRecord,
   AttendanceStatus,
-  CampSession,
-  ItineraryPoint,
   Participant,
   Report,
   ReportStatus,
   Role,
-  StaffMember,
-  Team
+  StaffMember
 } from "../../shared/types";
 import {
   apiBase,
   deleteReport,
   deleteParticipant,
-  deletePoint,
-  deleteSession,
   deleteStaffMember,
-  deleteTeam,
   getAttendancePoints,
   getAttendanceFamilySummaries,
   getAttendanceRecords,
@@ -30,13 +25,8 @@ import {
   getReports,
   getStaffMembers,
   saveAttendanceRecord,
-  saveCategories,
   saveParticipant,
-  savePoint,
-  saveRoles,
-  saveSession,
   saveStaffMember,
-  saveTeam,
   updateReportStatus
 } from "../api";
 import { RecordImages } from "../components/RecordImages";
@@ -63,15 +53,8 @@ import {
 
 type AdminView = "reports" | "people" | "attendance";
 type PeopleView = "staff" | "participants";
-type SessionDraft = Omit<CampSession, "id"> & { id?: string };
-type TeamDraft = Omit<Team, "id"> & { id?: string };
-type PointDraft = Omit<ItineraryPoint, "id"> & { id?: string };
 type StaffDraft = Omit<StaffMember, "id" | "createdAt" | "updatedAt"> & { id?: string };
 type ParticipantDraft = Omit<Participant, "id" | "createdAt" | "updatedAt"> & { id?: string };
-
-const emptySession = (): SessionDraft => ({ name: "", city: "", startsOn: "", endsOn: "" });
-const emptyTeam = (sessionId = ""): TeamDraft => ({ sessionId, name: "" });
-const emptyPoint = (sessionId = "", teamId = ""): PointDraft => ({ sessionId, teamId, name: "", sortOrder: 0 });
 
 const emptyStaff = (groupName = "一团"): StaffDraft => ({
   groupName,
@@ -143,6 +126,73 @@ function compareSequence(a: { sequence: string }, b: { sequence: string }) {
   return String(a.sequence).localeCompare(String(b.sequence), "zh-Hans-CN", { numeric: true });
 }
 
+function cleanStaffDraft(draft: StaffDraft): StaffDraft {
+  return {
+    ...draft,
+    idCard: normalizeIdCard(draft.idCard),
+    phone: normalizePhone(draft.phone)
+  };
+}
+
+function validateStaffDraft(draft: StaffDraft) {
+  if (!draft.idCard.trim()) return "工作人员身份证号不能为空";
+  if (!isValidIdCard(draft.idCard)) return "工作人员身份证号需要是18位有效身份证格式";
+  if (!draft.phone.trim()) return "工作人员手机号不能为空";
+  if (!isValidPhone(draft.phone)) return "工作人员手机号需要是11位有效手机号";
+  return "";
+}
+
+function cleanParticipantDraft(draft: ParticipantDraft): ParticipantDraft {
+  return {
+    ...draft,
+    parent1IdCard: normalizeIdCard(draft.parent1IdCard),
+    parent1Phone: normalizePhone(draft.parent1Phone),
+    parent2IdCard: normalizeIdCard(draft.parent2IdCard),
+    parent2Phone: normalizePhone(draft.parent2Phone),
+    parent3IdCard: normalizeIdCard(draft.parent3IdCard),
+    parent3Phone: normalizePhone(draft.parent3Phone),
+    childIdCard: normalizeIdCard(draft.childIdCard),
+    child2IdCard: normalizeIdCard(draft.child2IdCard)
+  };
+}
+
+function validatePersonIdentity(name: string, idCard: string, phone?: string) {
+  if (!name.trim()) return "姓名不能为空";
+  if (!idCard.trim()) return "身份证号不能为空";
+  if (!isValidIdCard(idCard)) return "身份证号需要是18位有效身份证格式";
+  if (phone !== undefined) {
+    if (!phone.trim()) return "手机号不能为空";
+    if (!isValidPhone(phone)) return "手机号需要是11位有效手机号";
+  }
+  return "";
+}
+
+function validateParticipantDraft(draft: ParticipantDraft) {
+  const familyType = inferFamilyType(draft);
+  const parent1Error = validatePersonIdentity("家长", draft.parent1IdCard, draft.parent1Phone);
+  if (!draft.parent1Name.trim()) return "家长姓名不能为空";
+  if (parent1Error) return `家长：${parent1Error}`;
+
+  if (hasSecondParent(familyType)) {
+    const error = validatePersonIdentity(draft.parent2Name, draft.parent2IdCard, draft.parent2Phone);
+    if (error) return `家长2：${error}`;
+  }
+  if (hasThirdParent(familyType)) {
+    const error = validatePersonIdentity(draft.parent3Name, draft.parent3IdCard, draft.parent3Phone);
+    if (error) return `家长3：${error}`;
+  }
+
+  const childError = validatePersonIdentity(draft.childName, draft.childIdCard);
+  if (childError) return `孩子：${childError}`;
+
+  if (hasSecondChild(familyType)) {
+    const error = validatePersonIdentity(draft.child2Name, draft.child2IdCard);
+    if (error) return `孩子2：${error}`;
+  }
+
+  return "";
+}
+
 const peopleCacheKey = "yanxue-admin-people-cache";
 const attendanceCacheKey = "yanxue-admin-attendance-cache";
 
@@ -201,12 +251,12 @@ export function AdminPage() {
         </button>
       </nav>
 
-      {activeView === "reports" ? <ReportsView data={data} reloadBootstrap={reload} /> : activeView === "people" ? <PeopleViewPanel /> : <AttendanceViewPanel />}
+      {activeView === "reports" ? <ReportsView data={data} /> : activeView === "people" ? <PeopleViewPanel /> : <AttendanceViewPanel />}
     </Shell>
   );
 }
 
-function ReportsView({ data, reloadBootstrap }: { data: NonNullable<ReturnType<typeof useBootstrap>["data"]>; reloadBootstrap: () => Promise<void> }) {
+function ReportsView({ data }: { data: NonNullable<ReturnType<typeof useBootstrap>["data"]> }) {
   const [reports, setReports] = useState<Report[]>([]);
   const [allReports, setAllReports] = useState<Report[]>([]);
   const [sessionId, setSessionId] = useState("");
@@ -214,14 +264,6 @@ function ReportsView({ data, reloadBootstrap }: { data: NonNullable<ReturnType<t
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(true);
-  const [sessionDraft, setSessionDraft] = useState<SessionDraft>(emptySession());
-  const [teamDraft, setTeamDraft] = useState<TeamDraft>(emptyTeam(data.sessions[0]?.id ?? ""));
-  const [pointDraft, setPointDraft] = useState<PointDraft>(emptyPoint(data.sessions[0]?.id ?? "", data.teams[0]?.id ?? ""));
-  const [categoriesText, setCategoriesText] = useState(data.categories.join("\n"));
-  const [roleLabels, setRoleLabels] = useState<Record<Role, string>>(
-    Object.fromEntries(data.roles.map((item) => [item.value, item.label])) as Record<Role, string>
-  );
-  const [configMessage, setConfigMessage] = useState("");
 
   async function loadReports() {
     setLoading(true);
@@ -237,24 +279,6 @@ function ReportsView({ data, reloadBootstrap }: { data: NonNullable<ReturnType<t
   useEffect(() => {
     loadReports().catch(() => setLoading(false));
   }, [sessionId, role, status, category]);
-
-  useEffect(() => {
-    setCategoriesText(data.categories.join("\n"));
-    setRoleLabels(Object.fromEntries(data.roles.map((item) => [item.value, item.label])) as Record<Role, string>);
-    setTeamDraft(emptyTeam(data.sessions[0]?.id ?? ""));
-    setPointDraft(emptyPoint(data.sessions[0]?.id ?? "", data.teams[0]?.id ?? ""));
-  }, [data]);
-
-  const teamsForConfig = useMemo(
-    () => data.teams.filter((item) => item.sessionId === pointDraft.sessionId),
-    [data.teams, pointDraft.sessionId]
-  );
-
-  async function refreshAfterConfig(message: string) {
-    setConfigMessage(message);
-    await reloadBootstrap();
-    await loadReports();
-  }
 
   async function setReportStatus(id: string, nextStatus: ReportStatus) {
     await updateReportStatus(id, nextStatus);
@@ -383,114 +407,6 @@ function ReportsView({ data, reloadBootstrap }: { data: NonNullable<ReturnType<t
           </div>
         )}
       </section>
-
-      <section className="panel config-panel">
-        <div className="section-head">
-          <h2>基础数据管理</h2>
-          <span>{configMessage || "修改后手机端会自动使用新数据"}</span>
-        </div>
-
-        <div className="config-grid">
-          <form className="config-card" onSubmit={async (event) => {
-            event.preventDefault();
-            await saveSession(sessionDraft);
-            setSessionDraft(emptySession());
-            await refreshAfterConfig("团期已保存");
-          }}>
-            <h3>团期</h3>
-            <input placeholder="团期名称" value={sessionDraft.name} onChange={(event) => setSessionDraft({ ...sessionDraft, name: event.target.value })} required />
-            <input placeholder="城市" value={sessionDraft.city} onChange={(event) => setSessionDraft({ ...sessionDraft, city: event.target.value })} />
-            <div className="inline-fields">
-              <input type="date" value={sessionDraft.startsOn} onChange={(event) => setSessionDraft({ ...sessionDraft, startsOn: event.target.value })} />
-              <input type="date" value={sessionDraft.endsOn} onChange={(event) => setSessionDraft({ ...sessionDraft, endsOn: event.target.value })} />
-            </div>
-            <button className="primary compact"><Plus size={16} />保存团期</button>
-            <div className="config-list">
-              {data.sessions.map((item) => (
-                <div className="config-row" key={item.id}>
-                  <span>{item.name}</span>
-                  <button type="button" onClick={async () => { await deleteSession(item.id); await refreshAfterConfig("团期已删除"); }}><Trash2 size={15} /></button>
-                </div>
-              ))}
-            </div>
-          </form>
-
-          <form className="config-card" onSubmit={async (event) => {
-            event.preventDefault();
-            await saveTeam(teamDraft);
-            setTeamDraft(emptyTeam(teamDraft.sessionId));
-            await refreshAfterConfig("队伍已保存");
-          }}>
-            <h3>队伍</h3>
-            <select value={teamDraft.sessionId} onChange={(event) => setTeamDraft({ ...teamDraft, sessionId: event.target.value })} required>
-              {data.sessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            <input placeholder="队伍名称" value={teamDraft.name} onChange={(event) => setTeamDraft({ ...teamDraft, name: event.target.value })} required />
-            <button className="primary compact"><Plus size={16} />保存队伍</button>
-            <div className="config-list">
-              {data.teams.map((item) => (
-                <div className="config-row" key={item.id}>
-                  <span>{sessionName(item.sessionId)} · {item.name}</span>
-                  <button type="button" onClick={async () => { await deleteTeam(item.id); await refreshAfterConfig("队伍已删除"); }}><Trash2 size={15} /></button>
-                </div>
-              ))}
-            </div>
-          </form>
-
-          <form className="config-card" onSubmit={async (event) => {
-            event.preventDefault();
-            await savePoint(pointDraft);
-            setPointDraft(emptyPoint(pointDraft.sessionId, pointDraft.teamId));
-            await refreshAfterConfig("环节已保存");
-          }}>
-            <h3>研学环节</h3>
-            <select value={pointDraft.sessionId} onChange={(event) => setPointDraft({ ...pointDraft, sessionId: event.target.value, teamId: "" })} required>
-              {data.sessions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            <select value={pointDraft.teamId} onChange={(event) => setPointDraft({ ...pointDraft, teamId: event.target.value })}>
-              <option value="">不限定队伍</option>
-              {teamsForConfig.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            <div className="inline-fields">
-              <input placeholder="环节名称" value={pointDraft.name} onChange={(event) => setPointDraft({ ...pointDraft, name: event.target.value })} required />
-              <input type="number" min="0" placeholder="排序" value={pointDraft.sortOrder} onChange={(event) => setPointDraft({ ...pointDraft, sortOrder: Number(event.target.value) })} />
-            </div>
-            <button className="primary compact"><Plus size={16} />保存环节</button>
-            <div className="config-list">
-              {data.points.map((item) => (
-                <div className="config-row" key={item.id}>
-                  <span>{sessionName(item.sessionId)} · {teamName(item.teamId) || "通用"} · {item.name}</span>
-                  <button type="button" onClick={async () => { await deletePoint(item.id); await refreshAfterConfig("环节已删除"); }}><Trash2 size={15} /></button>
-                </div>
-              ))}
-            </div>
-          </form>
-
-          <div className="config-card">
-            <h3>问题分类</h3>
-            <textarea value={categoriesText} onChange={(event) => setCategoriesText(event.target.value)} />
-            <button className="primary compact" type="button" onClick={async () => {
-              const categories = categoriesText.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
-              await saveCategories(categories);
-              await refreshAfterConfig("问题分类已保存");
-            }}><Save size={16} />保存分类</button>
-          </div>
-
-          <div className="config-card">
-            <h3>人员身份</h3>
-            {data.roles.map((item) => (
-              <label key={item.value}>
-                {item.value}
-                <input value={roleLabels[item.value] ?? item.label} onChange={(event) => setRoleLabels({ ...roleLabels, [item.value]: event.target.value })} />
-              </label>
-            ))}
-            <button className="primary compact" type="button" onClick={async () => {
-              await saveRoles(data.roles.map((item) => ({ value: item.value, label: roleLabels[item.value] || item.label })));
-              await refreshAfterConfig("人员身份已保存");
-            }}><Save size={16} />保存身份</button>
-          </div>
-        </div>
-      </section>
     </>
   );
 }
@@ -613,17 +529,33 @@ function PeopleViewPanel() {
       <section className="people-layout">
         <form className="panel people-form" onSubmit={async (event) => {
           event.preventDefault();
-          if (activePeopleView === "staff") {
-            await saveStaffMember(staffDraft);
-            setStaffDraft(emptyStaff(activeGroup));
-            setMessage(isEditingStaff ? `${activeGroup}工作人员已更新` : `${activeGroup}工作人员已保存`);
-          } else {
-            const familyType = inferFamilyType(participantDraft);
-            await saveParticipant(familyTypePatch({ ...participantDraft, familyType }, familyType));
-            setParticipantDraft(emptyParticipant(activeGroup));
-            setMessage(isEditingParticipant ? `${activeGroup}家庭信息已更新` : `${activeGroup}家庭信息已保存`);
+          try {
+            if (activePeopleView === "staff") {
+              const validationMessage = validateStaffDraft(staffDraft);
+              if (validationMessage) {
+                setMessage(validationMessage);
+                return;
+              }
+              const nextStaff = cleanStaffDraft(staffDraft);
+              await saveStaffMember(nextStaff);
+              setStaffDraft(emptyStaff(activeGroup));
+              setMessage(isEditingStaff ? `${activeGroup}工作人员已更新` : `${activeGroup}工作人员已保存`);
+            } else {
+              const familyType = inferFamilyType(participantDraft);
+              const nextParticipant = cleanParticipantDraft(familyTypePatch({ ...participantDraft, familyType }, familyType));
+              const validationMessage = validateParticipantDraft(nextParticipant);
+              if (validationMessage) {
+                setMessage(validationMessage);
+                return;
+              }
+              await saveParticipant(nextParticipant);
+              setParticipantDraft(emptyParticipant(activeGroup));
+              setMessage(isEditingParticipant ? `${activeGroup}家庭信息已更新` : `${activeGroup}家庭信息已保存`);
+            }
+            await loadPeople();
+          } catch (error) {
+            setMessage(error instanceof Error ? error.message : "保存失败，请检查填写内容");
           }
-          await loadPeople();
         }}>
           <div className="section-head">
             <h2>{activePeopleView === "staff" ? `${isEditingStaff ? "编辑" : "新增"}${activeGroup}工作人员` : `${isEditingParticipant ? "编辑" : "新增"}${activeGroup}家庭`}</h2>

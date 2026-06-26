@@ -3,6 +3,7 @@ import path from "node:path";
 import { nanoid } from "nanoid";
 import { attendanceProcessCount, buildDefaultAttendancePoints, defaultAttendanceProcessNames } from "../shared/attendance";
 import { hasSecondChild, hasSecondParent, hasThirdParent, inferFamilyType } from "../shared/people";
+import { normalizeIdCard, normalizePhone } from "../shared/validation";
 import type {
   AttendanceFamilySummary,
   AttendancePoint,
@@ -398,9 +399,9 @@ export async function saveStaffMember(input: {
     sequence: input.sequence,
     type: input.type,
     name: input.name,
-    idCard: input.idCard,
+    idCard: normalizeIdCard(input.idCard),
     gender: input.gender,
-    phone: input.phone,
+    phone: normalizePhone(input.phone),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now
   };
@@ -465,22 +466,22 @@ export async function saveParticipant(input: {
     sequence: input.sequence,
     familyType,
     parent1Name: input.parent1Name,
-    parent1IdCard: input.parent1IdCard,
-    parent1Phone: input.parent1Phone,
+    parent1IdCard: normalizeIdCard(input.parent1IdCard),
+    parent1Phone: normalizePhone(input.parent1Phone),
     parent2Name: keepSecondParent ? input.parent2Name : "",
-    parent2IdCard: keepSecondParent ? input.parent2IdCard : "",
-    parent2Phone: keepSecondParent ? input.parent2Phone : "",
+    parent2IdCard: keepSecondParent ? normalizeIdCard(input.parent2IdCard) : "",
+    parent2Phone: keepSecondParent ? normalizePhone(input.parent2Phone) : "",
     parent3Name: keepThirdParent ? input.parent3Name : "",
-    parent3IdCard: keepThirdParent ? input.parent3IdCard : "",
-    parent3Phone: keepThirdParent ? input.parent3Phone : "",
+    parent3IdCard: keepThirdParent ? normalizeIdCard(input.parent3IdCard) : "",
+    parent3Phone: keepThirdParent ? normalizePhone(input.parent3Phone) : "",
     childName: input.childName,
-    childIdCard: input.childIdCard,
+    childIdCard: normalizeIdCard(input.childIdCard),
     childGender: input.childGender,
     childHeight: input.childHeight,
     childWeight: input.childWeight,
     childSize: input.childSize,
     child2Name: keepSecondChild ? input.child2Name : "",
-    child2IdCard: keepSecondChild ? input.child2IdCard : "",
+    child2IdCard: keepSecondChild ? normalizeIdCard(input.child2IdCard) : "",
     child2Gender: keepSecondChild ? input.child2Gender : "",
     child2Height: keepSecondChild ? input.child2Height : "",
     child2Weight: keepSecondChild ? input.child2Weight : "",

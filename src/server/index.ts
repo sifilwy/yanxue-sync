@@ -5,6 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import { hasSecondChild, hasSecondParent, hasThirdParent, inferFamilyType } from "../shared/people";
+import { isValidIdCard, isValidPhone } from "../shared/validation";
 import {
   createReport,
   deleteReport,
@@ -101,6 +103,24 @@ const uploadSchema = z.object({
   thumbs: z.array(z.string().startsWith("data:image/")).max(3)
 });
 
+function addPersonIssues(ctx: z.RefinementCtx, basePath: string, label: string, input: { name?: string; idCard?: string; phone?: string }, options: { phone?: boolean } = {}) {
+  if (!input.name?.trim()) {
+    ctx.addIssue({ code: "custom", path: [basePath, "name"], message: `${label}姓名不能为空` });
+  }
+  if (!input.idCard?.trim()) {
+    ctx.addIssue({ code: "custom", path: [basePath, "idCard"], message: `${label}身份证号不能为空` });
+  } else if (!isValidIdCard(input.idCard)) {
+    ctx.addIssue({ code: "custom", path: [basePath, "idCard"], message: `${label}身份证号需要是18位有效身份证格式` });
+  }
+  if (options.phone) {
+    if (!input.phone?.trim()) {
+      ctx.addIssue({ code: "custom", path: [basePath, "phone"], message: `${label}手机号不能为空` });
+    } else if (!isValidPhone(input.phone)) {
+      ctx.addIssue({ code: "custom", path: [basePath, "phone"], message: `${label}手机号需要是11位有效手机号` });
+    }
+  }
+}
+
 const staffSchema = z.object({
   id: z.string().optional(),
   groupName: z.string().min(1).default("一团"),
@@ -110,6 +130,8 @@ const staffSchema = z.object({
   idCard: z.string().default(""),
   gender: z.string().default(""),
   phone: z.string().default("")
+}).superRefine((data, ctx) => {
+  addPersonIssues(ctx, "staff", "工作人员", { name: data.name, idCard: data.idCard, phone: data.phone }, { phone: true });
 });
 
 const participantSchema = z.object({
@@ -141,6 +163,19 @@ const participantSchema = z.object({
   roomNumber: z.string().default(""),
   roomType: z.string().default(""),
   note: z.string().default("")
+}).superRefine((data, ctx) => {
+  const familyType = inferFamilyType(data);
+  addPersonIssues(ctx, "parent1", "家长", { name: data.parent1Name, idCard: data.parent1IdCard, phone: data.parent1Phone }, { phone: true });
+  if (hasSecondParent(familyType)) {
+    addPersonIssues(ctx, "parent2", "家长2", { name: data.parent2Name, idCard: data.parent2IdCard, phone: data.parent2Phone }, { phone: true });
+  }
+  if (hasThirdParent(familyType)) {
+    addPersonIssues(ctx, "parent3", "家长3", { name: data.parent3Name, idCard: data.parent3IdCard, phone: data.parent3Phone }, { phone: true });
+  }
+  addPersonIssues(ctx, "child1", "孩子", { name: data.childName, idCard: data.childIdCard });
+  if (hasSecondChild(familyType)) {
+    addPersonIssues(ctx, "child2", "孩子2", { name: data.child2Name, idCard: data.child2IdCard });
+  }
 });
 
 const attendanceRecordSchema = z.object({
